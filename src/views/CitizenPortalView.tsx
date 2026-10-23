@@ -34,7 +34,10 @@ import {
   BadgeCheck,
   Zap,
   Tag,
-  MessageSquare
+  MessageSquare,
+  HelpCircle,
+  Info,
+  X
 } from 'lucide-react';
 import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile } from '../types';
 import { RATE_TABLE } from '../data/mockData';
@@ -75,6 +78,7 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [isHtml5ScannerOpen, setIsHtml5ScannerOpen] = useState(false);
+  const [showQrHowToTooltip, setShowQrHowToTooltip] = useState(false);
 
   // Sync selectedDevice when devices change (e.g. newly registered device)
   React.useEffect(() => {
@@ -381,18 +385,121 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
               <span className="text-[9px] text-emerald-400">Direct to UPI</span>
             </div>
 
-            {/* Quick Camera QR Scanner Trigger */}
-            <button
-              onClick={() => setIsHtml5ScannerOpen(true)}
-              className="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex flex-col items-center justify-center gap-1 transition shrink-0"
-              title="Scan QR codes using camera powered by html5-qrcode"
-            >
-              <div className="flex items-center gap-1.5">
-                <Camera className="w-4 h-4" />
-                <span className="whitespace-nowrap">Scan QR (Camera)</span>
-              </div>
-              <span className="text-[9px] opacity-80 font-normal">html5-qrcode engine</span>
-            </button>
+            {/* Quick Camera QR Scanner Trigger with Interactive How-to Tooltip/Overlay */}
+            <div className="relative shrink-0 flex items-center gap-1.5">
+              <button
+                onClick={() => setIsHtml5ScannerOpen(true)}
+                className="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex flex-col items-center justify-center gap-1 transition shrink-0 group focus-visible:ring-2 focus-visible:ring-emerald-400"
+                title="Scan QR codes using camera powered by html5-qrcode"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Camera className="w-4 h-4" />
+                  <span className="whitespace-nowrap">Scan QR (Camera)</span>
+                </div>
+                <span className="text-[9px] opacity-80 font-normal">html5-qrcode engine</span>
+              </button>
+
+              {/* How-to Tooltip Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setShowQrHowToTooltip((prev) => !prev)}
+                className={`h-[48px] px-2.5 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition ${
+                  showQrHowToTooltip
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 shadow-md shadow-emerald-950/40'
+                    : 'bg-slate-900 hover:bg-slate-800 border-slate-700/80 text-slate-400 hover:text-white'
+                }`}
+                title="Learn why scanning device serial numbers gives faster registration"
+                aria-label="How-to information on scanning device serial numbers"
+              >
+                <HelpCircle className="w-4 h-4 text-emerald-400" />
+                <span className="text-[9px] font-mono font-bold">Why Scan?</span>
+              </button>
+
+              {/* How-to Tooltip / Floating Overlay */}
+              {showQrHowToTooltip && (
+                <div
+                  role="tooltip"
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 p-4 rounded-2xl bg-slate-950/95 border border-emerald-500/40 shadow-2xl backdrop-blur-xl z-50 space-y-3 animate-in fade-in zoom-in-95 duration-200"
+                >
+                  <div className="flex items-start justify-between border-b border-slate-800/80 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white tracking-wide">
+                          Why Scan Device Serial Numbers?
+                        </h4>
+                        <span className="text-[10px] text-emerald-400 font-medium">
+                          5-Second Fast-Track Registration
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowQrHowToTooltip(false)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                      aria-label="Close tooltip"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
+                      <span className="text-emerald-400 font-bold text-xs mt-0.5">1.</span>
+                      <div>
+                        <strong className="text-slate-200 font-semibold block">Instant Specs Autofill</strong>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Extracts exact OEM serial number, brand, model year, and battery chemistry directly from barcode or QR label—zero manual typing.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
+                      <span className="text-cyan-400 font-bold text-xs mt-0.5">2.</span>
+                      <div>
+                        <strong className="text-slate-200 font-semibold block">Maximum Guaranteed Payout</strong>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Verified serial matches the official CPCB EPR subsidy tier, ensuring immediate top-band UPI compensation disbursement.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
+                      <span className="text-purple-400 font-bold text-xs mt-0.5">3.</span>
+                      <div>
+                        <strong className="text-slate-200 font-semibold block">NIST SP 800-88 Data Scrub Token</strong>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Pairs your hardware partition directly to certified cryptographic wiping docks before collection van pickup.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQrHowToTooltip(false);
+                        setIsHtml5ScannerOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Launch Camera Scanner</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQrHowToTooltip(false)}
+                      className="text-xs text-slate-400 hover:text-white px-2 py-1"
+                    >
+                      Got it
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -814,16 +921,31 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Serial Number or IMEI (Optional)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Serial Number or IMEI (Optional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsHtml5ScannerOpen(true)}
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold transition"
+                      title="Scan serial QR with camera for instant autofill"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Scan Serial QR</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    placeholder="Enter serial or scan tag"
+                    placeholder="Enter serial or scan tag (e.g. SN-8849102)"
                     value={formSerial}
                     onChange={(e) => setFormSerial(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    <span>Tip: Scanning the serial barcode on the device back auto-locks maximum EPR scrap valuation.</span>
+                  </p>
                 </div>
               </div>
 

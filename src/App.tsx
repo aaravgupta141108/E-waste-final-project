@@ -18,6 +18,7 @@ import { LeaderboardView } from './views/LeaderboardView';
 import { PushNotificationToast } from './components/PushNotificationToast';
 import { DEMO_USERS, MOCK_DEVICES, SYSTEM_ALERTS, INITIAL_COMPLIANCE_REMINDERS } from './data/mockData';
 import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert, UserProfile } from './types';
+import { findStoredUser, saveUserData } from './utils/userStorage';
 
 export default function App() {
   // Launch login page first by default
@@ -108,18 +109,44 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  // Login handler with support for custom new user profile
+  // Login handler with support for custom new or returning user profile
   const handleLogin = (role: Role, customUser?: UserProfile, asNewUser: boolean = false) => {
     setCurrentRole(role);
-    if (customUser) {
-      setCurrentUser(customUser);
+    if (role === 'citizen') {
+      const candidateUser = customUser || DEMO_USERS.citizen;
+      const stored = findStoredUser(candidateUser.mobile || candidateUser.email || candidateUser.name);
+      if (stored) {
+        setCurrentUser(stored.user);
+        // Populate this user's stored devices into devices state
+        setDevices((prev) => {
+          const others = prev.filter((d) => d.userId !== stored.user.id);
+          return [...stored.devices, ...others];
+        });
+        setIsNewUser(stored.devices.length === 0);
+      } else {
+        const initialDevices = asNewUser ? [] : MOCK_DEVICES.filter((d) => d.userId === candidateUser.id);
+        saveUserData(candidateUser, initialDevices);
+        setCurrentUser(candidateUser);
+        setIsNewUser(asNewUser);
+      }
     } else {
-      setCurrentUser(DEMO_USERS[role]);
+      if (customUser) {
+        setCurrentUser(customUser);
+      } else {
+        setCurrentUser(DEMO_USERS[role]);
+      }
+      setIsNewUser(asNewUser);
     }
-    setIsNewUser(asNewUser);
     setIsLoggedIn(true);
     setActiveTab('dashboard');
   };
+
+  // Automatically persist user profile & device changes for citizen consignors
+  React.useEffect(() => {
+    if (currentUser && currentUser.role === 'citizen') {
+      saveUserData(currentUser, devices);
+    }
+  }, [devices, currentUser]);
 
   // Logout handler
   const handleLogout = () => {
@@ -445,12 +472,16 @@ export default function App() {
     );
   }
 
-  // Filter devices visible to Citizen (New user starts with 0 devices)
+  // Filter devices visible to Citizen
   const visibleDevices =
     currentRole === 'citizen'
       ? isNewUser
         ? devices.filter((d) => d.userId === currentUser.id)
-        : devices.filter((d) => d.userId === currentUser.id || d.userId === 'USR-IND-8821')
+        : devices.filter(
+            (d) =>
+              d.userId === currentUser.id ||
+              (currentUser.id === DEMO_USERS.citizen.id && d.userId === 'USR-IND-8821')
+          )
       : devices;
 
   const handleSyncOfflineDevice = (newDeviceData: Partial<DeviceItem>) => {

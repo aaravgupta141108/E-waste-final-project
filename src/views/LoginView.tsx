@@ -22,11 +22,13 @@ import {
   UserPlus,
   UserCheck,
   BadgeCheck,
-  Info
+  Info,
+  Clock
 } from 'lucide-react';
 import { ThreeCanvas } from '../components/ThreeCanvas';
 import { DEMO_USERS } from '../data/mockData';
 import { Role, UserProfile } from '../types';
+import { findStoredUser, getSavedCitizensList, saveUserData } from '../utils/userStorage';
 
 interface LoginViewProps {
   onLogin: (role: Role, customUser?: UserProfile, asNewUser?: boolean) => void;
@@ -159,8 +161,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     setOfficerError(null);
   };
 
-  // Handle New Citizen Login (0 registered devices)
+  // Handle New or Returning Citizen Login
   const handleNewCitizenLogin = () => {
+    // Check if the user already exists in persistent storage with the same mobile or name
+    const existing = findStoredUser(newCitizenMobile) || findStoredUser(newCitizenName);
+    if (existing) {
+      onLogin('citizen', existing.user, existing.devices.length === 0);
+      return;
+    }
+
     const newUser: UserProfile = {
       id: `USR-NEW-${Math.floor(1000 + Math.random() * 9000)}`,
       name: newCitizenName.trim() || 'New Citizen Consignor',
@@ -172,8 +181,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       state: 'Delhi NCR',
       city: newCitizenCity || 'New Delhi',
       pincode: '110001',
-      upiId: `${newCitizenName.toLowerCase().replace(/\s+/g, '') || 'citizen'}@upi`
+      upiId: `${newCitizenName.toLowerCase().replace(/\s+/g, '') || 'citizen'}@upi`,
+      isVerified: true,
+      verificationMethod: 'DigiLocker KYC',
+      aadhaarMasked: 'XXXX-XXXX-4920',
+      registeredDevicesCount: 0,
+      totalGreenPoints: 0,
+      totalCarbonCreditsKg: 0,
+      totalFinancialBenefitsInr: 0
     };
+
+    // Store in localStorage registry
+    saveUserData(newUser, []);
 
     // Log in as new user with 0 registered devices
     onLogin('citizen', newUser, true);
@@ -181,7 +200,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
   // Handle Demo Citizen Login (existing records)
   const handleDemoCitizenLogin = () => {
-    onLogin('citizen', DEMO_USERS.citizen, false);
+    const existingDemo = findStoredUser(DEMO_USERS.citizen.mobile) || findStoredUser(DEMO_USERS.citizen.name);
+    onLogin('citizen', existingDemo ? existingDemo.user : DEMO_USERS.citizen, false);
   };
 
   // WebAuthn Passkey Simulation
@@ -525,19 +545,95 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-emerald-300/90 leading-relaxed">
-                  💡 Upon logging in, you will see <strong>0 registered devices</strong>. Once you register your first electronic asset, it will immediately display in your roster along with its live 10-step circular lifecycle stage!
-                </p>
+                {/* Returning User Notification Badge if previously stored */}
+                {(() => {
+                  const matched = findStoredUser(newCitizenMobile) || findStoredUser(newCitizenName);
+                  if (matched) {
+                    return (
+                      <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/60 shadow-md shadow-emerald-950/40 space-y-1 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Returning Account Detected</span>
+                          </span>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-200 border border-emerald-700">
+                            {matched.devices.length} Devices Stored
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-200">
+                          Welcome back, <strong>{matched.user.name}</strong> ({matched.user.mobile}). All your registered devices, stage milestones, and {matched.user.totalGreenPoints || 0} Green Points are preserved!
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                      💡 When you register devices under this account, all data is securely stored. Returning with the same mobile or name will immediately restore your complete device roster and payout tracking.
+                    </p>
+                  );
+                })()}
 
-                <button
-                  type="button"
-                  onClick={handleNewCitizenLogin}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Sign In as New User (0 Devices)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {/* Submit Action */}
+                {(() => {
+                  const matched = findStoredUser(newCitizenMobile) || findStoredUser(newCitizenName);
+                  if (matched) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleNewCitizenLogin}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2"
+                      >
+                        <UserCheck className="w-4 h-4 text-emerald-200" />
+                        <span>Sign In &amp; Load My Data ({matched.devices.length} Devices)</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleNewCitizenLogin}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Sign In as New User (0 Devices)</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  );
+                })()}
+
+                {/* Stored Accounts Quick Selector */}
+                {(() => {
+                  const saved = getSavedCitizensList();
+                  if (saved.length === 0) return null;
+                  return (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                      <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-cyan-400" />
+                        <span>Stored Accounts on this Browser:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {saved.map(({ user, deviceCount }) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              setNewCitizenName(user.name);
+                              setNewCitizenMobile(user.mobile);
+                              onLogin('citizen', user, deviceCount === 0);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 text-[11px] text-slate-300 hover:text-white transition flex items-center gap-1.5 font-mono"
+                            title={`Sign in directly as ${user.name} (${user.mobile})`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>{user.name}</span>
+                            <span className="text-emerald-400 font-bold">({deviceCount})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Card 2: Demo Citizen (Ananya Sharma) */}
