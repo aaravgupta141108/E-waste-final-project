@@ -1,0 +1,449 @@
+import React, { useState } from 'react';
+import { Navbar } from './components/Navbar';
+import { NotificationCenter } from './components/NotificationCenter';
+import { PrakritiAssistant } from './components/PrakritiAssistant';
+import { QRCodeModal } from './components/QRCodeModal';
+import { StatutoryVerificationModal } from './components/StatutoryVerificationModal';
+import { LiveChat } from './components/LiveChat';
+import { LoginView } from './views/LoginView';
+import { CitizenPortalView } from './views/CitizenPortalView';
+import { CollectionConsoleView } from './views/CollectionConsoleView';
+import { FactoryConsoleView } from './views/FactoryConsoleView';
+import { AuditorComplianceView } from './views/AuditorComplianceView';
+import { AdminMasterConsoleView } from './views/AdminMasterConsoleView';
+import { CarbonImpactView } from './views/CarbonImpactView';
+import { TrackingFleetGISView } from './views/TrackingFleetGISView';
+import { LeaderboardView } from './views/LeaderboardView';
+import { PushNotificationToast } from './components/PushNotificationToast';
+import { DEMO_USERS, MOCK_DEVICES, SYSTEM_ALERTS, INITIAL_COMPLIANCE_REMINDERS } from './data/mockData';
+import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert } from './types';
+
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [currentRole, setCurrentRole] = useState<Role>('citizen');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Core Data State
+  const [devices, setDevices] = useState<DeviceItem[]>(MOCK_DEVICES);
+  const [alerts, setAlerts] = useState<SystemAlert[]>(SYSTEM_ALERTS);
+  const [reminders, setReminders] = useState<ComplianceDeadlineReminder[]>(INITIAL_COMPLIANCE_REMINDERS);
+  const [activePushNotification, setActivePushNotification] = useState<{
+    title: string;
+    message: string;
+    quarter: string;
+    priority: string;
+    deadline: string;
+  } | null>(null);
+
+  // Theme state: 'dark' vs 'compliance-light' (high-contrast daylight regulatory audit mode)
+  const [theme, setTheme] = useState<'dark' | 'compliance-light'>('dark');
+
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'compliance-light') {
+        document.documentElement.classList.add('compliance-mode');
+        document.body.classList.add('compliance-mode');
+      } else {
+        document.documentElement.classList.remove('compliance-mode');
+        document.body.classList.remove('compliance-mode');
+      }
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'compliance-light' : 'dark'));
+  };
+
+  // Modals & Drawers State
+  const [isStatutoryModalOpen, setIsStatutoryModalOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  const currentUser = DEMO_USERS[currentRole];
+
+  // Role Switcher
+  const handleRoleChange = (newRole: Role) => {
+    setCurrentRole(newRole);
+    setActiveTab('dashboard');
+  };
+
+  // Login handler
+  const handleLogin = (role: Role) => {
+    setCurrentRole(role);
+    setIsLoggedIn(true);
+    setActiveTab('dashboard');
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+  };
+
+  // Device state mutations
+  const handleUpdateDeviceStatus = (
+    deviceId: string,
+    newStatus: DeviceItem['status'],
+    extraData?: Partial<DeviceItem>
+  ) => {
+    setDevices((prev) =>
+      prev.map((d) => {
+        if (d.id === deviceId) {
+          return {
+            ...d,
+            status: newStatus,
+            updatedAt: new Date().toLocaleString(),
+            ...(extraData || {})
+          };
+        }
+        return d;
+      })
+    );
+  };
+
+  const handleRegisterDevice = (deviceData: Partial<DeviceItem>) => {
+    const newDevice: DeviceItem = {
+      id: `BHW-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userPhone: currentUser.mobile,
+      category: deviceData.category || 'Smartphone',
+      brand: deviceData.brand || 'Generic',
+      model: deviceData.model || 'Standard',
+      serialNumber: deviceData.serialNumber || `SN-${Date.now()}`,
+      imei: deviceData.imei,
+      condition: deviceData.condition || 'working',
+      status: 'REGISTERED',
+      intakeWeightKg: deviceData.intakeWeightKg || 0.3,
+      estimatedScrapValue: deviceData.estimatedScrapValue || 450,
+      resaleValue: deviceData.resaleValue || 2000,
+      payoutAmount: deviceData.payoutAmount || 1500,
+      payoutMethod: 'UPI',
+      city: currentUser.city,
+      state: currentUser.state,
+      hubLocation: 'National Hub Sector 62 / Connaught Place',
+      registeredAt: new Date().toLocaleString(),
+      updatedAt: new Date().toLocaleString(),
+      intakeImageUrl:
+        deviceData.intakeImageUrl ||
+        'https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=600&q=80',
+      batteryPresent: deviceData.batteryPresent ?? true,
+      co2SavedKg: deviceData.co2SavedKg || 60
+    };
+
+    setDevices((prev) => [newDevice, ...prev]);
+  };
+
+  const handleConfirmDetails = (deviceId: string) => {
+    handleUpdateDeviceStatus(deviceId, 'DETAILS_CONFIRMED');
+  };
+
+  const handleAcknowledgePayment = (deviceId: string) => {
+    handleUpdateDeviceStatus(deviceId, 'PAYMENT_ACKNOWLEDGED', {
+      payoutAcknowledgedAt: new Date().toLocaleString()
+    });
+  };
+
+  const handleAddOperatorIntervention = (deviceId: string, intervention: OperatorIntervention) => {
+    setDevices((prev) =>
+      prev.map((d) => {
+        if (d.id === deviceId) {
+          const currentInterventions = d.interventions || [];
+          return {
+            ...d,
+            interventions: [intervention, ...currentInterventions]
+          };
+        }
+        return d;
+      })
+    );
+  };
+
+  const handleBulkImportDevices = (importedItems: Partial<DeviceItem>[]) => {
+    const newItems: DeviceItem[] = importedItems.map((item, idx) => ({
+      id: item.id || `BHW-BULK-${Date.now().toString().slice(-4)}-${idx + 1}`,
+      userId: item.userId || currentUser.id,
+      userName: item.userName || currentUser.name,
+      userPhone: item.userPhone || currentUser.mobile,
+      category: item.category || 'PCB & Component Board',
+      brand: item.brand || 'Enterprise OEM',
+      model: item.model || 'Server Node',
+      serialNumber: item.serialNumber || `SRV-${Date.now()}-${idx}`,
+      condition: item.condition || 'not_booting',
+      status: 'REGISTERED',
+      intakeWeightKg: item.intakeWeightKg || 1.2,
+      estimatedScrapValue: item.estimatedScrapValue || 800,
+      resaleValue: item.resaleValue || 0,
+      payoutAmount: item.payoutAmount || 800,
+      payoutMethod: 'Bank Transfer',
+      city: currentUser.city,
+      state: currentUser.state,
+      hubLocation: currentUser.organization || 'Central E-Waste Hub',
+      registeredAt: new Date().toLocaleString(),
+      updatedAt: new Date().toLocaleString(),
+      intakeImageUrl:
+        item.intakeImageUrl ||
+        'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+      batteryPresent: item.batteryPresent ?? false,
+      co2SavedKg: item.co2SavedKg || 120
+    }));
+
+    setDevices((prev) => [...newItems, ...prev]);
+  };
+
+  const handleResolveFlag = (deviceId: string, adminNote?: string) => {
+    handleUpdateDeviceStatus(deviceId, 'ACCEPTED', {
+      flagReason: undefined,
+      flagNotes: `Resolved by Master Admin with note: ${adminNote || 'Approved'}`
+    });
+  };
+
+  const handleResolveAlert = (alertId: string) => {
+    setAlerts((prev) =>
+      prev.map((a) => (a.id === alertId ? { ...a, resolved: true } : a))
+    );
+  };
+
+  const handleAddReminder = (newReminder: ComplianceDeadlineReminder) => {
+    setReminders((prev) => [newReminder, ...prev]);
+
+    // Trigger floating push toast
+    setActivePushNotification({
+      title: newReminder.title,
+      message: `Statutory reminder active for ${newReminder.filingType}. Alert triggers ${newReminder.leadTimeDays} days prior to deadline.`,
+      quarter: newReminder.quarter,
+      priority: newReminder.priority,
+      deadline: newReminder.deadlineDate
+    });
+
+    // Add alert to NotificationCenter list so bell counter increments!
+    const newAlert: SystemAlert = {
+      id: `ALT-REM-${Date.now().toString().slice(-4)}`,
+      timestamp: 'Just now',
+      type: 'cpcb_deadline',
+      title: newReminder.title,
+      message: `Statutory deadline configured for ${newReminder.deadlineDate} (${newReminder.filingType}). Lead time: ${newReminder.leadTimeDays} days.`,
+      severity: newReminder.priority === 'critical' ? 'critical' : newReminder.priority === 'high' ? 'high' : 'medium',
+      resolved: false,
+      linkToTab: 'compliance'
+    };
+    setAlerts((prev) => [newAlert, ...prev]);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(newReminder.title, {
+          body: `Deadline: ${newReminder.deadlineDate} (${newReminder.filingType})`
+        });
+      } catch (e) {}
+    } else if ('Notification' in window && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+  };
+
+  const handleDeleteReminder = (id: string) => {
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleTriggerPushNotification = (rem: ComplianceDeadlineReminder) => {
+    setActivePushNotification({
+      title: `Urgent Filing Notice: ${rem.title}`,
+      message: `${rem.notes} Report must be filed on the CPCB EPR portal by ${rem.deadlineDate}.`,
+      quarter: rem.quarter,
+      priority: rem.priority,
+      deadline: rem.deadlineDate
+    });
+
+    const newAlert: SystemAlert = {
+      id: `ALT-REM-${Date.now().toString().slice(-4)}`,
+      timestamp: 'Just now',
+      type: 'cpcb_deadline',
+      title: `Impending Deadline: ${rem.title}`,
+      message: `Quarterly filing due on ${rem.deadlineDate}. Assigned to ${rem.assignedOfficer}.`,
+      severity: rem.priority === 'critical' ? 'critical' : 'high',
+      resolved: false,
+      linkToTab: 'compliance'
+    };
+    setAlerts((prev) => [newAlert, ...prev]);
+  };
+
+  // If not logged in, show Login page
+  if (!isLoggedIn) {
+    return (
+      <LoginView
+        onLogin={handleLogin}
+        onExplorePublicPortal={() => {
+          setIsLoggedIn(true);
+          setCurrentRole('citizen');
+          setActiveTab('carbon');
+        }}
+      />
+    );
+  }
+
+  // Filter devices visible to Citizen
+  const visibleDevices =
+    currentRole === 'citizen'
+      ? devices.filter((d) => d.userId === currentUser.id)
+      : devices;
+
+  const unreadAlertCount = alerts.filter((a) => !a.resolved).length;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Navigation Header */}
+      <Navbar
+        currentRole={currentRole}
+        onRoleChange={handleRoleChange}
+        currentUser={currentUser}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onOpenStatutoryModal={() => setIsStatutoryModalOpen(true)}
+        onOpenQrModal={() => setIsQrModalOpen(true)}
+        onOpenAssistantModal={() => setIsAssistantModalOpen(true)}
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
+        onOpenChat={() => setIsChatOpen(true)}
+        onLogout={handleLogout}
+        unreadAlertCount={unreadAlertCount}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Tab Router */}
+        {activeTab === 'dashboard' && (
+          <>
+            {currentRole === 'citizen' && (
+              <CitizenPortalView
+                currentUser={currentUser}
+                devices={visibleDevices}
+                onRegisterDevice={handleRegisterDevice}
+                onConfirmDetails={handleConfirmDetails}
+                onUpdatePaymentPreference={(upiId) => {
+                  currentUser.upiId = upiId;
+                }}
+                onAcknowledgePayment={handleAcknowledgePayment}
+                onOpenQrModal={() => setIsQrModalOpen(true)}
+              />
+            )}
+
+            {currentRole === 'collection_engineer' && (
+              <CollectionConsoleView
+                devices={devices}
+                currentUser={currentUser}
+                onUpdateDeviceStatus={handleUpdateDeviceStatus}
+                onBulkImportDevices={handleBulkImportDevices}
+              />
+            )}
+
+            {currentRole === 'factory_engineer' && (
+              <FactoryConsoleView
+                devices={devices}
+                currentUser={currentUser}
+                onUpdateDeviceStatus={handleUpdateDeviceStatus}
+                onAddOperatorIntervention={handleAddOperatorIntervention}
+              />
+            )}
+
+            {currentRole === 'auditor' && (
+              <AuditorComplianceView
+                currentUser={currentUser}
+                devices={devices}
+                onResolveFlag={(dId) => handleResolveFlag(dId)}
+                reminders={reminders}
+                onAddReminder={handleAddReminder}
+                onDeleteReminder={handleDeleteReminder}
+                onTriggerPushNotification={handleTriggerPushNotification}
+              />
+            )}
+
+            {currentRole === 'admin' && (
+              <AdminMasterConsoleView
+                currentUser={currentUser}
+                devices={devices}
+                onResolveFlag={handleResolveFlag}
+              />
+            )}
+          </>
+        )}
+
+        {activeTab === 'fleet' && <TrackingFleetGISView />}
+
+        {activeTab === 'carbon' && (
+          <CarbonImpactView currentUser={currentUser} devices={devices} />
+        )}
+
+        {activeTab === 'compliance' && (
+          <AuditorComplianceView
+            currentUser={currentUser}
+            devices={devices}
+            onResolveFlag={(dId) => handleResolveFlag(dId)}
+            reminders={reminders}
+            onAddReminder={handleAddReminder}
+            onDeleteReminder={handleDeleteReminder}
+            onTriggerPushNotification={handleTriggerPushNotification}
+          />
+        )}
+
+        {activeTab === 'leaderboard' && <LeaderboardView />}
+      </main>
+
+      {/* Footer Notice */}
+      <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">
+        <div className="w-full max-w-7xl xl:max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>
+            Bharat E-Waste Hub • Central Pollution Control Board (CPCB) & MoEFCC Statutory Governance Node
+          </span>
+          <span className="font-mono text-[11px] text-slate-400">
+            NIST SP 800-88 Rev. 2 • IEEE 2883-2022 • DPDP Act 2023 Compliant
+          </span>
+        </div>
+      </footer>
+
+      {/* Interactive Global Modals */}
+      <StatutoryVerificationModal
+        isOpen={isStatutoryModalOpen}
+        onClose={() => setIsStatutoryModalOpen(false)}
+      />
+
+      <QRCodeModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        devices={devices}
+        onSelectDevice={(dId) => {
+          setActiveTab('dashboard');
+        }}
+      />
+
+      <PrakritiAssistant
+        isOpen={isAssistantModalOpen}
+        onClose={() => setIsAssistantModalOpen(false)}
+      />
+
+      <NotificationCenter
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        alerts={alerts}
+        onResolveAlert={handleResolveAlert}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+      />
+
+      <LiveChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentRole={currentRole}
+        currentUserName={currentUser.name}
+      />
+
+      {/* Push-style Notification Toast */}
+      <PushNotificationToast
+        activeNotification={activePushNotification}
+        onDismiss={() => setActivePushNotification(null)}
+        onOpenCalendar={() => {
+          setActiveTab('compliance');
+        }}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Bharat E-Waste Hub - National Governance & Circular Economy Platform",
+  "description": "National statutory e-waste tracking, NIST-grade data erasure validation, CPCB compliance portal, AI intake sorting, and carbon impact analytics across India.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
