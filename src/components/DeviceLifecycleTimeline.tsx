@@ -338,7 +338,7 @@ export const DeviceLifecycleTimeline: React.FC<DeviceLifecycleTimelineProps> = (
           <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
             <span className="text-slate-500 block text-[9px] font-sans">Storage Sanitization State</span>
             <span className="text-cyan-400 truncate block">
-              {device.wipeRecord?.status === 'VERIFIED' ? 'NIST SP 800-88 Sanitized' : 'In Custody / Pending'}
+              {device.wipeRecord?.status === 'Pass' || device.status === 'WIPE_VERIFIED' ? 'NIST SP 800-88 Sanitized' : 'In Custody / Pending'}
             </span>
           </div>
 
@@ -348,6 +348,167 @@ export const DeviceLifecycleTimeline: React.FC<DeviceLifecycleTimelineProps> = (
               ₹{device.payoutAmount.toLocaleString()} ({device.payoutMethod})
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Battery Health Indicator Widget (Age-Based Decay Model) */}
+      <BatteryHealthWidget device={device} />
+    </div>
+  );
+};
+
+export const BatteryHealthWidget: React.FC<{ device: DeviceItem }> = ({ device }) => {
+  const [simulatedAgeYears, setSimulatedAgeYears] = useState<number>(
+    device.deviceAgeYears ?? (device.condition === 'not_booting' ? 4.8 : device.condition === 'locked' ? 3.0 : 2.2)
+  );
+
+  // Design capacity defaults based on category
+  const designCapacity =
+    device.batteryDecayModel?.designCapacityMah ||
+    (device.category === 'Smartphone'
+      ? 4500
+      : device.category === 'Laptop'
+      ? 4800
+      : device.category === 'Lithium Battery Pack'
+      ? 100000
+      : 3200);
+
+  // Age-based electrochemical decay equation:
+  // SoH(t) = 100 - (alpha * t^0.85) - (cycles * 0.035)
+  const annualDegradationRate = device.category === 'Lithium Battery Pack' ? 8.2 : 7.1;
+  const estimatedCycles = Math.round(simulatedAgeYears * 220);
+  const healthPct = Math.max(
+    15,
+    Math.min(
+      100,
+      Math.round(100 - (simulatedAgeYears * annualDegradationRate) - (estimatedCycles * 0.015))
+    )
+  );
+  const remainingCapacity = Math.round((designCapacity * healthPct) / 100);
+
+  const getStatusLevel = (pct: number) => {
+    if (pct >= 80) return { label: 'Optimal / High Retention', color: 'emerald', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' };
+    if (pct >= 60) return { label: 'Degraded Normal Aging', color: 'amber', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400' };
+    return { label: 'Critical / Swelling Risk', color: 'rose', bg: 'bg-rose-500/10', border: 'border-rose-500/30', text: 'text-rose-400' };
+  };
+
+  const statusLevel = getStatusLevel(healthPct);
+
+  if (!device.batteryPresent) {
+    return (
+      <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <span className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-slate-600" />
+          No chemical battery cell present in this consignment.
+        </span>
+        <span className="font-mono text-[10px] text-slate-500">Direct PCB & Silicon Refining</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-slate-900/60 border border-slate-800/80 p-4 space-y-3.5 transition-all">
+      {/* Top Header of Battery Widget */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${statusLevel.bg} ${statusLevel.border} border`}>
+            <span className={`text-sm font-black font-mono ${statusLevel.text}`}>
+              {healthPct}%
+            </span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h5 className="text-xs font-bold text-white tracking-wide">
+                Electrochemical Battery Health & Decay Analytics
+              </h5>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${statusLevel.bg} ${statusLevel.border} ${statusLevel.text} font-semibold`}>
+                {statusLevel.label}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Arrhenius Age-Decay Model: {simulatedAgeYears.toFixed(1)} years in service · ~{estimatedCycles} full equivalent cycles
+            </p>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <span className="text-[10px] font-mono text-slate-400 block">Usable Capacity</span>
+          <span className="text-xs font-mono font-bold text-white tabular-nums">
+            {remainingCapacity.toLocaleString()} / {designCapacity.toLocaleString()} mAh
+          </span>
+        </div>
+      </div>
+
+      {/* Visual Capacity Decay Meter */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-[11px] font-mono">
+          <span className="text-slate-400">State of Health (SoH) Curve</span>
+          <span className={`font-bold ${statusLevel.text} tabular-nums`}>
+            {healthPct}% of Original Design
+          </span>
+        </div>
+        <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              healthPct >= 80
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                : healthPct >= 60
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                : 'bg-gradient-to-r from-rose-500 to-red-600'
+            }`}
+            style={{ width: `${healthPct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[9px] font-mono text-slate-500">
+          <span>0% (Dead Cell)</span>
+          <span>60% (CPCB Second-Life Cutoff)</span>
+          <span>80% (Consumer Standard)</span>
+          <span>100% (Factory Spec)</span>
+        </div>
+      </div>
+
+      {/* Decay Metrics Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-mono">
+        <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
+          <span className="text-slate-500 block text-[9px] font-sans">Degradation Velocity</span>
+          <span className="text-slate-200 font-semibold tabular-nums">-{annualDegradationRate}% / yr</span>
+        </div>
+        <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
+          <span className="text-slate-500 block text-[9px] font-sans">Cathode Integrity</span>
+          <span className="text-cyan-400 font-semibold">{healthPct > 70 ? 'NMC Stable' : 'Impedance Rise'}</span>
+        </div>
+        <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
+          <span className="text-slate-500 block text-[9px] font-sans">Dendrite Swelling Risk</span>
+          <span className={`font-semibold ${healthPct < 60 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            {healthPct < 60 ? 'Hazmat Class 9' : 'Low Nominal'}
+          </span>
+        </div>
+        <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80">
+          <span className="text-slate-500 block text-[9px] font-sans">Circular Destination</span>
+          <span className="text-amber-300 truncate block">
+            {healthPct >= 65 ? 'Solar BESS Storage' : 'Direct Li-Hydrometallurgy'}
+          </span>
+        </div>
+      </div>
+
+      {/* Interactive Age Simulation Slider */}
+      <div className="pt-1 border-t border-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <label className="text-[11px] text-slate-400 flex items-center gap-1.5">
+          <span>Simulate Operating Age:</span>
+          <strong className="text-white font-mono">{simulatedAgeYears.toFixed(1)} Years</strong>
+        </label>
+        <div className="flex items-center gap-3 w-full sm:w-64">
+          <span className="text-[10px] font-mono text-slate-500">New</span>
+          <input
+            type="range"
+            min="0.2"
+            max="6.0"
+            step="0.1"
+            value={simulatedAgeYears}
+            onChange={(e) => setSimulatedAgeYears(parseFloat(e.target.value))}
+            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+          />
+          <span className="text-[10px] font-mono text-slate-500">6Y+</span>
         </div>
       </div>
     </div>

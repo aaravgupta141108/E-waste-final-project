@@ -1,62 +1,110 @@
-import React, { useState } from 'react';
-import { X, QrCode, Scan, ShieldCheck, Printer, Check, Copy, AlertCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  QrCode,
+  Scan,
+  ShieldCheck,
+  Printer,
+  Check,
+  Copy,
+  AlertCircle,
+  ArrowRight,
+  Package,
+  Truck,
+  Building,
+  CheckCircle2,
+  Lock,
+  Layers
+} from 'lucide-react';
 import { DeviceItem } from '../types';
 
-interface QRCodeModalProps {
+export interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
   devices: DeviceItem[];
   onSelectDevice: (deviceId: string) => void;
+  targetDeviceId?: string | null;
 }
 
 export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   isOpen,
   onClose,
-  devices,
-  onSelectDevice
+  devices = [],
+  onSelectDevice,
+  targetDeviceId
 }) => {
   const [activeMode, setActiveMode] = useState<'generate' | 'scan'>('generate');
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(devices[0]?.id || '');
-  const [binId, setBinId] = useState('BIN-DEL-CP-04');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
+    targetDeviceId || devices[0]?.id || ''
+  );
   const [scannedResult, setScannedResult] = useState<DeviceItem | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Synchronize when targetDeviceId changes or modal opens
+  useEffect(() => {
+    if (targetDeviceId) {
+      setSelectedDeviceId(targetDeviceId);
+    } else if (devices.length > 0 && !selectedDeviceId) {
+      setSelectedDeviceId(devices[0].id);
+    }
+  }, [targetDeviceId, devices, isOpen]);
+
   if (!isOpen) return null;
 
+  // Given case only
   const currentDevice = devices.find((d) => d.id === selectedDeviceId) || devices[0];
+
+  if (!currentDevice) return null;
+
+  // Case-specific bin and pallet identifiers
+  const caseBinId = `BIN-${(currentDevice.city || 'DEL').slice(0, 3).toUpperCase()}-${currentDevice.id.slice(-4)}`;
+  const casePalletId = `PALLET-${currentDevice.batchId || currentDevice.id.slice(-4)}`;
+  const caseSealNumber = `SEAL-CPCB-${currentDevice.id.slice(-4)}-2026`;
+
+  const qrPayload = JSON.stringify({
+    statutoryRegistry: 'CPCB-GOI-EWASTE-REGISTRY',
+    custodyCaseId: currentDevice.id,
+    physicalBinId: caseBinId,
+    palletLotId: casePalletId,
+    securitySealNumber: caseSealNumber,
+    deviceCategory: currentDevice.category,
+    deviceBrand: currentDevice.brand,
+    deviceModel: currentDevice.model,
+    serialOrImei: currentDevice.imei || currentDevice.serialNumber,
+    intakeWeightKg: currentDevice.intakeWeightKg,
+    currentStage: currentDevice.status,
+    consignorName: currentDevice.userName,
+    hubLocation: currentDevice.hubLocation,
+    sanitizationHash: currentDevice.wipeRecord?.verificationHash || 'CPCB-CHAIN-UNBROKEN'
+  });
 
   const handleSimulateScan = (device: DeviceItem) => {
     setIsScanning(true);
     setTimeout(() => {
       setIsScanning(false);
       setScannedResult(device);
-    }, 900);
+    }, 800);
   };
 
-  const qrPayload = JSON.stringify({
-    custodyId: currentDevice?.id,
-    binId: binId,
-    category: currentDevice?.category,
-    brand: currentDevice?.brand,
-    model: currentDevice?.model,
-    hash: currentDevice?.wipeRecord?.verificationHash || 'CPCB-VERIFIED-CHAIN-2026',
-    statutoryRegistry: 'CPCB-GOI-EWASTE-REGISTRY'
-  });
-
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className="w-full max-w-2xl bg-slate-900 border border-emerald-500/40 rounded-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Physical Bin & Custody QR Linkage</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Physical Bin &amp; Custody QR Linkage</h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
+                  Case {currentDevice.id} Only
+                </span>
+              </div>
               <p className="text-[11px] text-slate-400">
-                Statutory digital chain of custody for collection bins & pallets
+                Statutory digital chain of custody for collection bins &amp; pallets of the given case
               </p>
             </div>
           </div>
@@ -79,7 +127,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             }`}
           >
             <QrCode className="w-3.5 h-3.5" />
-            <span>Generate Bin / Lot QR</span>
+            <span>Digital Custody Tag &amp; Bin QR</span>
           </button>
           <button
             onClick={() => setActiveMode('scan')}
@@ -90,7 +138,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             }`}
           >
             <Scan className="w-3.5 h-3.5" />
-            <span>Auditor Field Scanner</span>
+            <span>Field Custody Auditor Scanner</span>
           </button>
         </div>
 
@@ -98,40 +146,63 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {activeMode === 'generate' ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Scoped Case Banner */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    Select Device for Chain of Custody
-                  </label>
-                  <select
-                    value={selectedDeviceId}
-                    onChange={(e) => setSelectedDeviceId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    {devices.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.id} - {d.brand} {d.model} ({d.category})
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                    Target Case Custody Lock:
+                  </span>
+                  <div className="font-bold text-white flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-emerald-400">{currentDevice.id}</span>
+                    <span>•</span>
+                    <span>{currentDevice.brand} {currentDevice.model}</span>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    Physical Bin / Pallet Identifier
-                  </label>
-                  <input
-                    type="text"
-                    value={binId}
-                    onChange={(e) => setBinId(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
+
+                {/* Case selector if multiple cases exist */}
+                {devices.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 text-[11px]">Switch Case:</span>
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                    >
+                      {devices.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.id} ({d.brand})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Physical Bin & Pallet Identification Strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-mono">
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] font-sans">Physical Bin Identifier</span>
+                  <div className="text-cyan-300 font-bold truncate">{caseBinId}</div>
+                  <span className="text-[9px] text-slate-400 font-sans">Fire-Retardant Seal</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] font-sans">Pallet Lot Group</span>
+                  <div className="text-amber-300 font-bold truncate">{casePalletId}</div>
+                  <span className="text-[9px] text-slate-400 font-sans">Geotagged Fleet Crate</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] font-sans">Tamper-Proof Seal #</span>
+                  <div className="text-emerald-400 font-bold truncate">{caseSealNumber}</div>
+                  <span className="text-[9px] text-slate-400 font-sans">CPCB Class-9 Verified</span>
                 </div>
               </div>
 
-              {/* Printable QR Code Card */}
-              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center gap-6">
+              {/* Printable QR Code & Statutory Linkage Card */}
+              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 flex flex-col sm:flex-row items-center gap-6">
                 {/* Visual QR representation */}
-                <div className="p-3 bg-white rounded-xl shadow-lg flex flex-col items-center">
+                <div className="p-3.5 bg-white rounded-xl shadow-xl flex flex-col items-center shrink-0">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
                       qrPayload
@@ -140,35 +211,43 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                     className="w-36 h-36"
                   />
                   <span className="text-[9px] font-mono font-bold text-slate-900 mt-2">
-                    {currentDevice?.id}
+                    {currentDevice.id}
                   </span>
                 </div>
 
-                <div className="flex-1 space-y-2 text-left w-full">
+                <div className="flex-1 space-y-2 text-left w-full text-xs">
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase font-bold text-emerald-400 tracking-wider">
-                      Official CPCB Chain of Custody
+                      Official CPCB Custody Linkage
                     </span>
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   </div>
+
                   <h4 className="text-base font-bold text-white">
-                    {currentDevice?.brand} {currentDevice?.model}
+                    {currentDevice.brand} {currentDevice.model}
                   </h4>
-                  <div className="text-xs text-slate-400 space-y-1">
+
+                  <div className="text-xs text-slate-300 space-y-1 font-mono">
                     <p>
-                      <strong className="text-slate-300">Category:</strong> {currentDevice?.category}
+                      <strong className="text-slate-400 font-sans">Case ID:</strong> {currentDevice.id}
                     </p>
                     <p>
-                      <strong className="text-slate-300">Serial/IMEI:</strong>{' '}
-                      {currentDevice?.imei || currentDevice?.serialNumber}
+                      <strong className="text-slate-400 font-sans">Serial / IMEI:</strong>{' '}
+                      {currentDevice.imei || currentDevice.serialNumber}
                     </p>
                     <p>
-                      <strong className="text-slate-300">Current Bin:</strong> {binId} (
-                      {currentDevice?.hubLocation})
+                      <strong className="text-slate-400 font-sans">Intake Scale Weight:</strong>{' '}
+                      {currentDevice.intakeWeightKg} kg
                     </p>
                     <p>
-                      <strong className="text-slate-300">Stage:</strong>{' '}
-                      <span className="text-emerald-400 font-semibold">{currentDevice?.status}</span>
+                      <strong className="text-slate-400 font-sans">Current Stage:</strong>{' '}
+                      <span className="text-emerald-400 font-bold">{currentDevice.status}</span>
+                    </p>
+                    <p>
+                      <strong className="text-slate-400 font-sans">Custody Linkage Hash:</strong>{' '}
+                      <span className="text-[10px] text-cyan-300 truncate block">
+                        {currentDevice.wipeRecord?.verificationHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+                      </span>
                     </p>
                   </div>
 
@@ -182,7 +261,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                       className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copied Payload' : 'Copy Payload'}</span>
+                      <span>{copied ? 'Copied Token' : 'Copy Custody Token'}</span>
                     </button>
                     <button
                       onClick={() => window.print()}
@@ -194,99 +273,101 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center relative overflow-hidden">
-                <div className="w-48 h-48 mx-auto border-2 border-dashed border-emerald-500/60 rounded-xl relative flex items-center justify-center bg-slate-900/50">
-                  {isScanning ? (
-                    <div className="space-y-2">
-                      <Scan className="w-8 h-8 text-emerald-400 mx-auto animate-pulse" />
-                      <p className="text-xs text-emerald-400 font-medium">Decoding CPCB Signature...</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 p-3">
-                      <QrCode className="w-8 h-8 text-slate-500 mx-auto" />
-                      <p className="text-xs text-slate-400">Aim camera or click test devices below to simulate scan</p>
-                    </div>
-                  )}
 
-                  {/* Scanning beam animation */}
-                  <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse-glow" />
+              {/* Custody Chain Milestones for this given case only */}
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Statutory Custody Flow of Case {currentDevice.id}
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                    <span className="text-slate-500 block text-[9px]">1. Origin Consignor</span>
+                    <strong className="text-white block truncate">{currentDevice.userName}</strong>
+                    <span className="text-slate-400 text-[10px]">{currentDevice.city}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                    <span className="text-slate-500 block text-[9px]">2. Hub Custody Station</span>
+                    <strong className="text-emerald-400 block truncate">{currentDevice.hubLocation}</strong>
+                    <span className="text-slate-400 text-[10px]">Bin {caseBinId}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                    <span className="text-slate-500 block text-[9px]">3. Smelting Pallet Lot</span>
+                    <strong className="text-cyan-400 block truncate">{currentDevice.recyclerName || 'EcoRecycle Apex Solutions'}</strong>
+                    <span className="text-slate-400 text-[10px]">{casePalletId}</span>
+                  </div>
                 </div>
               </div>
-
-              <div>
-                <p className="text-[11px] font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                  Test Scan Pre-defined Batches in Facility:
+            </div>
+          ) : (
+            /* Field Scanner Mode */
+            <div className="space-y-4">
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center relative overflow-hidden">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 mb-3">
+                  <Scan className={`w-8 h-8 ${isScanning ? 'animate-pulse text-cyan-400' : ''}`} />
+                </div>
+                <h4 className="text-base font-bold text-white">Simulate Field Auditor Custody Scan</h4>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                  Click a registered case below to simulate an SPCB or CPCB inspector scanning a physical bin barcode in the field.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {devices.slice(0, 4).map((d) => (
+
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {devices.map((d) => (
                     <button
                       key={d.id}
                       onClick={() => handleSimulateScan(d)}
-                      className="text-left p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 transition flex items-center justify-between group"
+                      disabled={isScanning}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono text-emerald-400 border border-slate-700 transition"
                     >
-                      <div>
-                        <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition">
-                          {d.id}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          {d.brand} {d.model} • {d.status}
-                        </div>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
+                      Scan {d.id}
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Scanned Custody Verification Result */}
               {scannedResult && (
-                <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-700/50 space-y-2 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4" />
-                      Verified National Chain of Custody Record
-                    </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
-                      AUTHENTICATED
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-300 grid grid-cols-2 gap-2 pt-1">
-                    <div>
-                      <span className="text-slate-400">Device ID:</span> {scannedResult.id}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Category:</span> {scannedResult.category}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Status:</span> {scannedResult.status}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Hub:</span> {scannedResult.hubLocation}
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Wipe Hash:</span>{' '}
-                      <span className="font-mono text-[10px] text-emerald-400">
-                        {scannedResult.wipeRecord?.verificationHash.slice(0, 16)}...
+                <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-white">
+                        Chain of Custody Verified: Case {scannedResult.id}
                       </span>
                     </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-bold">
+                      {scannedResult.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                     <div>
-                      <span className="text-slate-400">CO2 Saved:</span> {scannedResult.co2SavedKg} kg
+                      <span className="text-slate-500 block font-sans">Physical Bin:</span>
+                      <span className="text-white">BIN-{scannedResult.city.slice(0, 3).toUpperCase()}-{scannedResult.id.slice(-4)}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block font-sans">Consignor:</span>
+                      <span className="text-white">{scannedResult.userName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block font-sans">Intake Weight:</span>
+                      <span className="text-emerald-400">{scannedResult.intakeWeightKg} kg</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block font-sans">CPCB Compliance:</span>
+                      <span className="text-cyan-400">Schedule-I Cleared</span>
                     </div>
                   </div>
-                  <div className="pt-2 text-right">
-                    <button
-                      onClick={() => {
-                        onSelectDevice(scannedResult.id);
-                        onClose();
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-medium text-white transition inline-flex items-center gap-1"
-                    >
-                      <span>Open in Demanufacturing Console</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+
+                  <button
+                    onClick={() => {
+                      onSelectDevice(scannedResult.id);
+                      onClose();
+                    }}
+                    className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow"
+                  >
+                    <span>Inspect Case in Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>

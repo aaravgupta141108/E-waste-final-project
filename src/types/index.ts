@@ -44,6 +44,14 @@ export interface UserProfile {
     ifsc: string;
     bankName: string;
   };
+  isVerified?: boolean;
+  verificationMethod?: 'DigiLocker KYC' | 'Aadhaar e-KYC' | 'CPCB Registered Consignor';
+  verificationDate?: string;
+  aadhaarMasked?: string;
+  registeredDevicesCount?: number;
+  totalGreenPoints?: number;
+  totalCarbonCreditsKg?: number;
+  totalFinancialBenefitsInr?: number;
 }
 
 export interface WipeRecord {
@@ -133,6 +141,40 @@ export interface DeviceItem {
   certificateHash?: string;
   co2SavedKg: number;
   notes?: string;
+  deviceAgeYears?: number;
+  batteryDecayModel?: {
+    designCapacityMah: number;
+    estimatedRemainingCapacityMah: number;
+    healthPct: number;
+    estimatedCycles: number;
+    decayModelRate: string;
+    status: 'Optimal' | 'Normal Aging' | 'Degraded' | 'Critical / Swelling Risk';
+    secondLifeSuitability: string;
+  };
+  pickupInfo?: {
+    pickupId: string;
+    scheduledDate: string;
+    timeSlot: string;
+    pickupAddress: string;
+    pincode: string;
+    assignedCollectorName: string;
+    collectorPhone: string;
+    collectorVehicleNumber: string;
+    status: 'Scheduled' | 'Out for Pickup' | 'Collected' | 'In Transit to Hub' | 'Reached Hub & Received by Engineer';
+    reachesEngineerEta: string;
+    engineerName: string;
+    hubLocation: string;
+    currentStageDescription: string;
+  };
+  greenPointsEarned?: number;
+  carbonCreditsEarnedKg?: number;
+  financialBenefits?: {
+    upiPayoutInr: number;
+    eprSubsidyBonusInr: number;
+    greenTaxRebateInr: number;
+    dataSanitizationSavingsInr: number;
+    totalBenefitsInr: number;
+  };
 }
 
 export interface RecyclerPartner {

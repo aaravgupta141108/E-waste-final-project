@@ -30,10 +30,10 @@ import { Role, UserProfile } from '../types';
 
 interface LoginViewProps {
   onLogin: (role: Role, customUser?: UserProfile, asNewUser?: boolean) => void;
-  onExplorePublicPortal: () => void;
+  onExplorePublicPortal?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPortal }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [activeTab, setActiveTab] = useState<'officer' | 'citizen' | 'persona'>('officer');
 
   // Officer Login State
@@ -254,14 +254,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
             </p>
           </div>
         </div>
-
-        <button
-          onClick={onExplorePublicPortal}
-          className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition flex items-center gap-1.5"
-        >
-          <Globe2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Statutory Verification Portal</span>
-        </button>
       </header>
 
       {/* Main Container */}

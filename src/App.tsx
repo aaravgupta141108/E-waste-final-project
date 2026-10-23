@@ -59,9 +59,21 @@ export default function App() {
   // Modals & Drawers State
   const [isStatutoryModalOpen, setIsStatutoryModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [targetQrDeviceId, setTargetQrDeviceId] = useState<string | null>(null);
   const [isAssistantModalOpen, setIsAssistantModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [targetChatCaseId, setTargetChatCaseId] = useState<string | null>(null);
+
+  const handleOpenQrModal = (deviceId?: string) => {
+    setTargetQrDeviceId(deviceId || null);
+    setIsQrModalOpen(true);
+  };
+
+  const handleOpenChat = (caseId?: string) => {
+    setTargetChatCaseId(caseId || null);
+    setIsChatOpen(true);
+  };
 
   // User and Auth State
   const [currentUser, setCurrentUser] = useState<UserProfile>(DEMO_USERS.citizen);
@@ -136,8 +148,21 @@ export default function App() {
   };
 
   const handleRegisterDevice = (deviceData: Partial<DeviceItem>) => {
+    const payout = deviceData.payoutAmount || 1500;
+    const co2 = deviceData.co2SavedKg || (deviceData.category === 'Smartphone' ? 58 : deviceData.category === 'Laptop' ? 245 : 120);
+    const age = deviceData.deviceAgeYears || 2.2;
+    const designCap =
+      deviceData.category === 'Smartphone'
+        ? 4500
+        : deviceData.category === 'Laptop'
+        ? 4800
+        : deviceData.category === 'Lithium Battery Pack'
+        ? 100000
+        : 3200;
+    const estHealth = Math.max(20, Math.min(100, Math.round(100 - age * 7.4)));
+
     const newDevice: DeviceItem = {
-      id: `BHW-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: deviceData.id || `BHW-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       userId: currentUser.id,
       userName: currentUser.name,
       userPhone: currentUser.mobile,
@@ -151,7 +176,7 @@ export default function App() {
       intakeWeightKg: deviceData.intakeWeightKg || 0.3,
       estimatedScrapValue: deviceData.estimatedScrapValue || 450,
       resaleValue: deviceData.resaleValue || 2000,
-      payoutAmount: deviceData.payoutAmount || 1500,
+      payoutAmount: payout,
       payoutMethod: 'UPI',
       city: currentUser.city,
       state: currentUser.state,
@@ -162,10 +187,53 @@ export default function App() {
         deviceData.intakeImageUrl ||
         'https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=600&q=80',
       batteryPresent: deviceData.batteryPresent ?? true,
-      co2SavedKg: deviceData.co2SavedKg || 60
+      co2SavedKg: co2,
+      deviceAgeYears: age,
+      batteryDecayModel: {
+        designCapacityMah: designCap,
+        estimatedRemainingCapacityMah: Math.round((designCap * estHealth) / 100),
+        healthPct: estHealth,
+        estimatedCycles: Math.round(age * 220),
+        decayModelRate: '7.4% / yr Arrhenius Decay',
+        status: estHealth >= 80 ? 'Optimal' : estHealth >= 60 ? 'Normal Aging' : 'Degraded',
+        secondLifeSuitability: estHealth >= 65 ? 'Eligible for Solar BESS stationary cascade' : 'Direct hydrometallurgical refining'
+      },
+      pickupInfo: deviceData.pickupInfo || {
+        pickupId: `PKP-IND-${Date.now().toString().slice(-6)}`,
+        scheduledDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        timeSlot: '10:00 AM - 01:00 PM',
+        pickupAddress: `${currentUser.city || 'Connaught Place'}, ${currentUser.state || 'Delhi NCR'}`,
+        pincode: currentUser.pincode || '110001',
+        assignedCollectorName: 'Vikram Singh (CPCB Badge #COL-882)',
+        collectorPhone: '+91 98112 44910',
+        collectorVehicleNumber: 'DL-01-EV-4491 (Green Corridor EV)',
+        status: 'Scheduled',
+        reachesEngineerEta: 'Estimated handover to Hub Engineer: Tomorrow 02:30 PM',
+        engineerName: 'Rajesh Verma (ENG-COL-104)',
+        hubLocation: 'CPCB Certified Hub #04 - Connaught Place',
+        currentStageDescription: 'Doorstep pickup booked. Collection Engineer assigned with GPS-monitored electric van.'
+      },
+      greenPointsEarned: Math.round(payout * 0.12) + 150,
+      carbonCreditsEarnedKg: co2,
+      financialBenefits: {
+        upiPayoutInr: payout,
+        eprSubsidyBonusInr: 350,
+        greenTaxRebateInr: 200,
+        dataSanitizationSavingsInr: 1200,
+        totalBenefitsInr: payout + 1750
+      }
     };
 
     setDevices((prev) => [newDevice, ...prev]);
+
+    // Update current user's registered device count and green points
+    setCurrentUser((prev) => ({
+      ...prev,
+      registeredDevicesCount: (prev.registeredDevicesCount || 0) + 1,
+      totalGreenPoints: (prev.totalGreenPoints || 0) + Math.round(payout * 0.12) + 150,
+      totalCarbonCreditsKg: (prev.totalCarbonCreditsKg || 0) + co2,
+      totalFinancialBenefitsInr: (prev.totalFinancialBenefitsInr || 0) + payout + 1750
+    }));
   };
 
   const handleConfirmDetails = (deviceId: string) => {
@@ -424,10 +492,10 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onOpenStatutoryModal={() => setIsStatutoryModalOpen(true)}
-        onOpenQrModal={() => setIsQrModalOpen(true)}
+        onOpenQrModal={() => handleOpenQrModal()}
         onOpenAssistantModal={() => setIsAssistantModalOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
-        onOpenChat={() => setIsChatOpen(true)}
+        onOpenChat={() => handleOpenChat()}
         onLogout={handleLogout}
         unreadAlertCount={unreadAlertCount}
         theme={theme}
@@ -476,7 +544,8 @@ export default function App() {
                       currentUser.upiId = upiId;
                     }}
                     onAcknowledgePayment={handleAcknowledgePayment}
-                    onOpenQrModal={() => setIsQrModalOpen(true)}
+                    onOpenQrModal={handleOpenQrModal}
+                    onOpenChat={handleOpenChat}
                     onAdvanceDeviceStage={handleAdvanceDeviceStage}
                   />
                 )}
@@ -571,9 +640,14 @@ export default function App() {
 
       <QRCodeModal
         isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
+        onClose={() => {
+          setIsQrModalOpen(false);
+          setTargetQrDeviceId(null);
+        }}
         devices={devices}
+        targetDeviceId={targetQrDeviceId}
         onSelectDevice={(dId) => {
+          setTargetQrDeviceId(dId);
           setActiveTab('dashboard');
         }}
       />
@@ -593,9 +667,15 @@ export default function App() {
 
       <LiveChat
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={() => {
+          setIsChatOpen(false);
+          setTargetChatCaseId(null);
+        }}
         currentRole={currentRole}
         currentUserName={currentUser.name}
+        devices={devices}
+        selectedCaseId={targetChatCaseId}
+        onSelectCase={(caseId) => setTargetChatCaseId(caseId)}
       />
 
       {/* Push-style Notification Toast */}

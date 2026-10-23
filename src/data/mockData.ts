@@ -26,7 +26,15 @@ export const DEMO_USERS: Record<string, UserProfile> = {
       accountNumber: '••••••••8492',
       ifsc: 'HDFC0000128',
       bankName: 'HDFC Bank - Connaught Place'
-    }
+    },
+    isVerified: true,
+    verificationMethod: 'DigiLocker KYC',
+    verificationDate: '2026-03-12',
+    aadhaarMasked: 'XXXX-XXXX-4920',
+    registeredDevicesCount: 3,
+    totalGreenPoints: 1850,
+    totalCarbonCreditsKg: 483.6,
+    totalFinancialBenefitsInr: 16950
   },
   collection_engineer: {
     id: 'ENG-COL-104',
@@ -244,7 +252,41 @@ export const MOCK_DEVICES: DeviceItem[] = [
     },
     certificateId: 'CPCB-CERT-DEL-2026-88192',
     certificateHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-    co2SavedKg: 58.4
+    co2SavedKg: 58.4,
+    deviceAgeYears: 2.8,
+    batteryDecayModel: {
+      designCapacityMah: 4500,
+      estimatedRemainingCapacityMah: 3375,
+      healthPct: 75,
+      estimatedCycles: 640,
+      decayModelRate: '6.8% capacity loss / yr (NMC Chemistry)',
+      status: 'Degraded',
+      secondLifeSuitability: 'Recommended for hydrometallurgical recycling and lithium cathode leaching.'
+    },
+    pickupInfo: {
+      pickupId: 'PKP-DEL-2026-9041',
+      scheduledDate: '2026-10-15',
+      timeSlot: '10:00 AM - 01:00 PM',
+      pickupAddress: 'Flat 402, Block C, Mayur Vihar Phase 1, New Delhi',
+      pincode: '110091',
+      assignedCollectorName: 'Vikram Singh (CPCB Badge #COL-882)',
+      collectorPhone: '+91 98112 44910',
+      collectorVehicleNumber: 'DL-01-EV-4491 (Electric Eco-Van)',
+      status: 'Reached Hub & Received by Engineer',
+      reachesEngineerEta: 'Completed on Oct 15 at 11:45 AM',
+      engineerName: 'Rajesh Verma (ENG-COL-104)',
+      hubLocation: 'CPCB Certified Hub #04 - Connaught Place',
+      currentStageDescription: 'Stage 10 of 10 reached: CPCB Form 6 Destruction Certificate issued.'
+    },
+    greenPointsEarned: 350,
+    carbonCreditsEarnedKg: 58.4,
+    financialBenefits: {
+      upiPayoutInr: 2850,
+      eprSubsidyBonusInr: 450,
+      greenTaxRebateInr: 200,
+      dataSanitizationSavingsInr: 1200,
+      totalBenefitsInr: 4700
+    }
   },
   {
     id: 'BHW-2026-9042',
@@ -312,7 +354,41 @@ export const MOCK_DEVICES: DeviceItem[] = [
         hazardType: 'Swollen Li-Polymer Pack'
       }
     ],
-    co2SavedKg: 245.0
+    co2SavedKg: 245.0,
+    deviceAgeYears: 4.5,
+    batteryDecayModel: {
+      designCapacityMah: 4800,
+      estimatedRemainingCapacityMah: 2160,
+      healthPct: 45,
+      estimatedCycles: 980,
+      decayModelRate: '12.2% / yr (Elevated Thermal Swelling)',
+      status: 'Critical / Swelling Risk',
+      secondLifeSuitability: 'UN-Class 9 Hazmat isolation required; non-viable for reuse cascade.'
+    },
+    pickupInfo: {
+      pickupId: 'PKP-DEL-2026-9042',
+      scheduledDate: '2026-10-17',
+      timeSlot: '02:00 PM - 05:00 PM',
+      pickupAddress: 'Flat 402, Block C, Mayur Vihar Phase 1, New Delhi',
+      pincode: '110091',
+      assignedCollectorName: 'Amit Raghav (CPCB Badge #COL-890)',
+      collectorPhone: '+91 98711 02934',
+      collectorVehicleNumber: 'DL-01-EV-4491 (Electric Eco-Van)',
+      status: 'Reached Hub & Received by Engineer',
+      reachesEngineerEta: 'Completed on Oct 17 at 04:15 PM',
+      engineerName: 'Rajesh Verma (ENG-COL-104)',
+      hubLocation: 'CPCB Certified Hub #04 - Connaught Place',
+      currentStageDescription: 'Stage 8 of 10 reached: Factory Inspection & Triage at Demanufacturing Plant.'
+    },
+    greenPointsEarned: 850,
+    carbonCreditsEarnedKg: 245.0,
+    financialBenefits: {
+      upiPayoutInr: 6200,
+      eprSubsidyBonusInr: 800,
+      greenTaxRebateInr: 450,
+      dataSanitizationSavingsInr: 1200,
+      totalBenefitsInr: 8650
+    }
   },
   {
     id: 'BHW-2026-8810',
@@ -345,7 +421,41 @@ export const MOCK_DEVICES: DeviceItem[] = [
     batchId: 'BATCH-DEL-2026-BAT-08',
     recyclerPartnerId: 'REC-UP-001',
     recyclerName: 'EcoRecycle Apex Solutions India Ltd.',
-    co2SavedKg: 180.2
+    co2SavedKg: 180.2,
+    deviceAgeYears: 3.5,
+    batteryDecayModel: {
+      designCapacityMah: 100000,
+      estimatedRemainingCapacityMah: 62000,
+      healthPct: 62,
+      estimatedCycles: 1420,
+      decayModelRate: '10.8% / yr (High-Voltage Cycling)',
+      status: 'Degraded',
+      secondLifeSuitability: 'Secondary micro-grid agricultural pumping cascade candidate.'
+    },
+    pickupInfo: {
+      pickupId: 'PKP-DEL-2026-8810',
+      scheduledDate: '2026-10-18',
+      timeSlot: '11:00 AM - 02:00 PM',
+      pickupAddress: 'Flat 402, Block C, Mayur Vihar Phase 1, New Delhi',
+      pincode: '110091',
+      assignedCollectorName: 'Vikram Singh (CPCB Badge #COL-882)',
+      collectorPhone: '+91 98112 44910',
+      collectorVehicleNumber: 'DL-01-EV-4491 (Electric Eco-Van)',
+      status: 'In Transit to Hub',
+      reachesEngineerEta: 'Estimated arrival at Hub: Today at 04:30 PM',
+      engineerName: 'Rajesh Verma (ENG-COL-104)',
+      hubLocation: 'CPCB Certified Hub #04 - Connaught Place',
+      currentStageDescription: 'Stage 7 of 10: En route in Geotagged Electric Fleet to Central Processing Hub.'
+    },
+    greenPointsEarned: 650,
+    carbonCreditsEarnedKg: 180.2,
+    financialBenefits: {
+      upiPayoutInr: 4200,
+      eprSubsidyBonusInr: 600,
+      greenTaxRebateInr: 300,
+      dataSanitizationSavingsInr: 0,
+      totalBenefitsInr: 5100
+    }
   },
   {
     id: 'BHW-2026-7731',
