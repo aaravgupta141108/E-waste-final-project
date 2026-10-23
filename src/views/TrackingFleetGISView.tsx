@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Truck,
   MapPin,
@@ -16,400 +16,1655 @@ import {
   Info,
   Download,
   FileSpreadsheet,
-  Check
+  Check,
+  Search,
+  Filter,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Play,
+  Pause,
+  ChevronRight,
+  Route,
+  Compass,
+  FileText,
+  Calendar,
+  X,
+  Phone,
+  Globe,
+  Building2,
+  Factory,
+  Flame,
+  SlidersHorizontal,
+  Package
 } from 'lucide-react';
-import { FLEET_TRUCKS, LANDFILL_CLUSTERS, NATIONAL_STATS } from '../data/mockData';
-import { FleetTruck, LandfillCluster } from '../types';
+import L from 'leaflet';
+import { FLEET_TRUCKS } from '../data/mockData';
+import { DeviceItem, FleetTruck } from '../types';
 
-export const TrackingFleetGISView: React.FC = () => {
-  const [selectedTruck, setSelectedTruck] = useState<FleetTruck>(FLEET_TRUCKS[0]);
-  const [gisHeatmapActive, setGisHeatmapActive] = useState(true);
-  const [hoveredState, setHoveredState] = useState<string | null>(null);
-  const [hoveredLandfill, setHoveredLandfill] = useState<LandfillCluster | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+export interface TrackingFleetGISViewProps {
+  devices?: DeviceItem[];
+  onSelectDevice?: (deviceId: string) => void;
+}
 
-  // States with coordinate pins on India grid
-  const stateNodes = [
-    { id: 'DEL', name: 'Delhi NCR', x: 36, y: 30, genK: 95, rate: 62.0, fleet: 4, landfillRisk: 'Critical (Ghazipur)' },
-    { id: 'UP', name: 'Uttar Pradesh', x: 48, y: 35, genK: 395, rate: 95.4, fleet: 8, landfillRisk: 'Managed' },
-    { id: 'HR', name: 'Haryana', x: 32, y: 28, genK: 154, rate: 88.3, fleet: 5, landfillRisk: 'Normal' },
-    { id: 'PB', name: 'Punjab', x: 28, y: 22, genK: 72, rate: 33.5, fleet: 3, landfillRisk: 'Under-collected' },
-    { id: 'MH', name: 'Maharashtra', x: 34, y: 56, genK: 215, rate: 41.1, fleet: 7, landfillRisk: 'Critical (Deonar)' },
-    { id: 'GJ', name: 'Gujarat', x: 20, y: 46, genK: 110, rate: 45.0, fleet: 4, landfillRisk: 'Elevated (Pirana)' },
-    { id: 'TG', name: 'Telangana', x: 44, y: 64, genK: 182, rate: 89.0, fleet: 6, landfillRisk: 'Elevated (Jawaharnagar)' },
-    { id: 'KA', name: 'Karnataka', x: 36, y: 74, genK: 160, rate: 46.4, fleet: 7, landfillRisk: 'Elevated (Mavallipura)' },
-    { id: 'TN', name: 'Tamil Nadu', x: 42, y: 84, genK: 142, rate: 43.7, fleet: 5, landfillRisk: 'Normal (Kodungaiyur)' },
-    { id: 'WB', name: 'West Bengal', x: 68, y: 44, genK: 85, rate: 32.7, fleet: 3, landfillRisk: 'Under-collected' },
-    { id: 'MP', name: 'Madhya Pradesh', x: 40, y: 46, genK: 98, rate: 68.2, fleet: 4, landfillRisk: 'Swachh Apex' },
-    { id: 'RJ', name: 'Rajasthan', x: 24, y: 36, genK: 88, rate: 38.0, fleet: 2, landfillRisk: 'Under-collected' }
-  ];
+interface StateGISNode {
+  code: string;
+  name: string;
+  coords: [number, number];
+  ewasteGenerationTons: number;
+  recyclingRatePct: number;
+  activeTrucks: number;
+  hubCity: string;
+  truckId?: string;
+  stateFilterValue: string;
+}
 
-  const handleExportTelemetry = (format: 'csv' | 'excel') => {
-    setShowExportMenu(false);
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const separator = format === 'csv' ? ',' : '\t';
-    const extension = format === 'csv' ? 'csv' : 'xls';
+interface LogisticsHub {
+  id: string;
+  name: string;
+  code: string;
+  city: string;
+  state: string;
+  coords: [number, number];
+  dailyCapacityKg: number;
+  currentIntakeKg: number;
+  dockBays: number;
+  activeVehicles: number;
+  contactPerson: string;
+  contactPhone: string;
+  type: 'Consolidation Center' | 'Intake Depot' | 'Regional Transit Yard';
+}
 
-    let content = '';
+interface RecyclingFacility {
+  id: string;
+  name: string;
+  cpcbRegNumber: string;
+  spcbConsentNumber: string;
+  city: string;
+  state: string;
+  coords: [number, number];
+  annualCapacityTonnes: number;
+  recoveryEfficiencyPct: number;
+  streams: string[];
+  status: 'CPCB Certified' | 'Operational & Audited';
+  divertedTonnes: number;
+  contactEmail: string;
+}
 
-    // Statutory Header
-    content += `CENTRAL POLLUTION CONTROL BOARD - NATIONAL E-WASTE TELEMETRY AUDIT REPORT\r\n`;
-    content += `Export Timestamp: ${new Date().toLocaleString('en-IN')}\r\n`;
-    content += `Dataset Scope: Active Logistics Fleet Telemetry & Municipal Landfill Satiation Grid\r\n`;
-    content += `Regulatory Framework: E-Waste Management Rules 2022 (Schedule III/IV)\r\n\r\n`;
+interface TrafficCorridor {
+  id: string;
+  name: string;
+  state: string;
+  level: 'Heavy Congestion' | 'Moderate' | 'Clear';
+  avgSpeedKmph: number;
+  delayMin: number;
+  activeTruckCount: number;
+  waypoints: [number, number][];
+  color: string;
+  dashArray?: string;
+  note: string;
+}
 
-    // Section 1: Fleet Logistics
-    content += `--- SECTION 1: LOGISTICS FLEET TELEMETRY & PREDICTIVE MAINTENANCE ---\r\n`;
-    const fleetHeaders = [
-      'Truck ID',
-      'Vehicle Registration',
-      'Assigned Driver',
-      'Driver Contact',
-      'Current Transit Route',
-      'Current Hub Location',
-      'Operational Status',
-      'Load Percentage (%)',
-      'Capacity (Kg)',
-      'Current Load (Kg)',
-      'Engine Operating Hours',
-      'Tire Pressure (PSI)',
-      'Past Breakdowns',
-      'Vibration Anomaly Score (0-100)',
-      'Predictive Maintenance Service Recommendation',
-      'Traffic Condition',
-      'GPS Coordinates'
-    ];
-    content += fleetHeaders.join(separator) + '\r\n';
+// 12 State GIS nodes and percentages strictly matching Screenshot 2
+const GIS_STATES: StateGISNode[] = [
+  {
+    code: 'PB',
+    name: 'Punjab',
+    coords: [30.9010, 75.8573],
+    ewasteGenerationTons: 68000,
+    recyclingRatePct: 34,
+    activeTrucks: 0,
+    hubCity: 'Mohali Industrial Cluster',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'HR',
+    name: 'Haryana',
+    coords: [29.0588, 76.0856],
+    ewasteGenerationTons: 92000,
+    recyclingRatePct: 88,
+    activeTrucks: 0,
+    hubCity: 'Manesar Logistics Park',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'DEL',
+    name: 'Delhi NCR',
+    coords: [28.6139, 77.2090],
+    ewasteGenerationTons: 145000,
+    recyclingRatePct: 62,
+    activeTrucks: 1,
+    hubCity: 'Delhi NCR Hub 04',
+    truckId: 'TRK-IND-01',
+    stateFilterValue: 'Uttar Pradesh'
+  },
+  {
+    code: 'UP',
+    name: 'Uttar Pradesh',
+    coords: [26.8467, 80.9462],
+    ewasteGenerationTons: 180000,
+    recyclingRatePct: 95,
+    activeTrucks: 1,
+    hubCity: 'Greater Noida Recycler Plant',
+    truckId: 'TRK-IND-01',
+    stateFilterValue: 'Uttar Pradesh'
+  },
+  {
+    code: 'RJ',
+    name: 'Rajasthan',
+    coords: [26.9124, 73.7873],
+    ewasteGenerationTons: 88000,
+    recyclingRatePct: 38,
+    activeTrucks: 0,
+    hubCity: 'Bhiwadi Circular Depot',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'GJ',
+    name: 'Gujarat',
+    coords: [22.2587, 71.1924],
+    ewasteGenerationTons: 135000,
+    recyclingRatePct: 45,
+    activeTrucks: 0,
+    hubCity: 'Sanand Industrial Cluster',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'MP',
+    name: 'Madhya Pradesh',
+    coords: [23.2599, 77.4126],
+    ewasteGenerationTons: 78000,
+    recyclingRatePct: 68,
+    activeTrucks: 0,
+    hubCity: 'Mandideep Terminal',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'WB',
+    name: 'West Bengal',
+    coords: [23.2868, 87.8550],
+    ewasteGenerationTons: 110000,
+    recyclingRatePct: 33,
+    activeTrucks: 0,
+    hubCity: 'Salt Lake Sector V Hub',
+    stateFilterValue: 'ALL'
+  },
+  {
+    code: 'MH',
+    name: 'Maharashtra',
+    coords: [19.2560, 74.8777],
+    ewasteGenerationTons: 240000,
+    recyclingRatePct: 41,
+    activeTrucks: 1,
+    hubCity: 'Taloja MIDC Refinery',
+    truckId: 'TRK-IND-03',
+    stateFilterValue: 'Maharashtra'
+  },
+  {
+    code: 'TG',
+    name: 'Telangana',
+    coords: [17.3850, 78.4867],
+    ewasteGenerationTons: 120000,
+    recyclingRatePct: 89,
+    activeTrucks: 1,
+    hubCity: 'Patancheru Eco Zone',
+    truckId: 'TRK-IND-04',
+    stateFilterValue: 'Telangana'
+  },
+  {
+    code: 'KA',
+    name: 'Karnataka',
+    coords: [14.5716, 75.8946],
+    ewasteGenerationTons: 165000,
+    recyclingRatePct: 46,
+    activeTrucks: 1,
+    hubCity: 'Peenya Recovery Hub',
+    truckId: 'TRK-IND-02',
+    stateFilterValue: 'Karnataka'
+  },
+  {
+    code: 'TN',
+    name: 'Tamil Nadu',
+    coords: [11.0827, 78.4707],
+    ewasteGenerationTons: 150000,
+    recyclingRatePct: 44,
+    activeTrucks: 1,
+    hubCity: 'Sriperumbudur SEZ',
+    truckId: 'TRK-IND-05',
+    stateFilterValue: 'Tamil Nadu'
+  }
+];
 
-    FLEET_TRUCKS.forEach((t) => {
-      const row = [
-        `"${t.id}"`,
-        `"${t.vehicleNumber}"`,
-        `"${t.driverName}"`,
-        `"${t.driverPhone}"`,
-        `"${t.currentRoute}"`,
-        `"${t.currentLocationName}"`,
-        `"${t.status}"`,
-        t.loadPercentage,
-        t.capacityKg,
-        t.currentLoadKg,
-        t.engineHours,
-        t.tirePressurePsi,
-        t.pastBreakdownCount,
-        t.vibrationAnomalyScore,
-        `"${t.serviceIntervalRecommendation}"`,
-        `"${t.trafficLevel}"`,
-        `"${t.coordinates[0]}, ${t.coordinates[1]}"`
-      ];
-      content += row.join(separator) + '\r\n';
-    });
+// Logistics Hubs Dataset
+const LOGISTICS_HUBS: LogisticsHub[] = [
+  {
+    id: 'HUB-DEL-04',
+    name: 'Delhi Central Consignment Hub #04',
+    code: 'DEL-CP-04',
+    city: 'New Delhi',
+    state: 'Delhi NCR',
+    coords: [28.6315, 77.2167],
+    dailyCapacityKg: 5000,
+    currentIntakeKg: 3840,
+    dockBays: 6,
+    activeVehicles: 3,
+    contactPerson: 'Rajesh Verma (Lead Engineer)',
+    contactPhone: '+91 98110 44211',
+    type: 'Consolidation Center'
+  },
+  {
+    id: 'HUB-DEL-OKH',
+    name: 'Okhla Phase III Quarantine & Sorting Depot',
+    code: 'DEL-OKH-01',
+    city: 'South Delhi',
+    state: 'Delhi NCR',
+    coords: [28.5350, 77.2680],
+    dailyCapacityKg: 7500,
+    currentIntakeKg: 6200,
+    dockBays: 8,
+    activeVehicles: 4,
+    contactPerson: 'Sunil Mehta (Depot Incharge)',
+    contactPhone: '+91 98112 55432',
+    type: 'Intake Depot'
+  },
+  {
+    id: 'HUB-RJ-BHW',
+    name: 'Bhiwadi Circular Interstate Gateway Depot',
+    code: 'RJ-BHW-02',
+    city: 'Bhiwadi',
+    state: 'Rajasthan',
+    coords: [28.2104, 76.8606],
+    dailyCapacityKg: 6000,
+    currentIntakeKg: 4100,
+    dockBays: 6,
+    activeVehicles: 2,
+    contactPerson: 'Rameshwar Gurjar',
+    contactPhone: '+91 94140 88219',
+    type: 'Regional Transit Yard'
+  },
+  {
+    id: 'HUB-HR-MAN',
+    name: 'Manesar Clean Tech Logistics Terminal',
+    code: 'HR-MAN-01',
+    city: 'Gurugram',
+    state: 'Haryana',
+    coords: [28.3588, 76.9400],
+    dailyCapacityKg: 9000,
+    currentIntakeKg: 7800,
+    dockBays: 10,
+    activeVehicles: 5,
+    contactPerson: 'Karanvir Singh',
+    contactPhone: '+91 98120 77341',
+    type: 'Consolidation Center'
+  },
+  {
+    id: 'HUB-KA-PEE',
+    name: 'Peenya South Zonal Recovery & Transit Hub',
+    code: 'KA-BLR-02',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    coords: [13.0310, 77.5260],
+    dailyCapacityKg: 12000,
+    currentIntakeKg: 10450,
+    dockBays: 12,
+    activeVehicles: 6,
+    contactPerson: 'Basavaraj Gowda',
+    contactPhone: '+91 94480 34567',
+    type: 'Consolidation Center'
+  },
+  {
+    id: 'HUB-KA-ECI',
+    name: 'Electronic City Phase 1 IT Collection Hub',
+    code: 'KA-BLR-01',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    coords: [12.8452, 77.6602],
+    dailyCapacityKg: 4500,
+    currentIntakeKg: 3200,
+    dockBays: 4,
+    activeVehicles: 2,
+    contactPerson: 'Deepak Rao',
+    contactPhone: '+91 98450 11982',
+    type: 'Intake Depot'
+  },
+  {
+    id: 'HUB-MH-TAL',
+    name: 'Taloja Industrial Coastal Transit Depot',
+    code: 'MH-MUM-03',
+    city: 'Navi Mumbai',
+    state: 'Maharashtra',
+    coords: [19.0600, 73.1100],
+    dailyCapacityKg: 11000,
+    currentIntakeKg: 8900,
+    dockBays: 8,
+    activeVehicles: 4,
+    contactPerson: 'Sachin Kulkarni',
+    contactPhone: '+91 98200 66541',
+    type: 'Regional Transit Yard'
+  },
+  {
+    id: 'HUB-TG-PAT',
+    name: 'Patancheru Semiconductor & Telecom Depot',
+    code: 'TG-HYD-01',
+    city: 'Hyderabad',
+    state: 'Telangana',
+    coords: [17.5280, 78.2670],
+    dailyCapacityKg: 8500,
+    currentIntakeKg: 6900,
+    dockBays: 8,
+    activeVehicles: 3,
+    contactPerson: 'Venkat Reddy',
+    contactPhone: '+91 98490 22319',
+    type: 'Consolidation Center'
+  },
+  {
+    id: 'HUB-TN-SRI',
+    name: 'Sriperumbudur High-Tech Hardware Depot',
+    code: 'TN-CHE-02',
+    city: 'Chennai',
+    state: 'Tamil Nadu',
+    coords: [12.9800, 79.9400],
+    dailyCapacityKg: 7800,
+    currentIntakeKg: 6400,
+    dockBays: 6,
+    activeVehicles: 3,
+    contactPerson: 'M. Senthil Kumar',
+    contactPhone: '+91 94440 99812',
+    type: 'Consolidation Center'
+  },
+  {
+    id: 'HUB-WB-SLK',
+    name: 'Salt Lake Sector V Eastern Zonal Hub',
+    code: 'WB-KOL-01',
+    city: 'Kolkata',
+    state: 'West Bengal',
+    coords: [22.5800, 88.4300],
+    dailyCapacityKg: 6200,
+    currentIntakeKg: 4700,
+    dockBays: 6,
+    activeVehicles: 2,
+    contactPerson: 'Debabrata Mukherjee',
+    contactPhone: '+91 98300 45678',
+    type: 'Regional Transit Yard'
+  }
+];
 
-    content += `\r\n`;
+// Recycling Facilities Dataset (CPCB Registered)
+const RECYCLING_FACILITIES: RecyclingFacility[] = [
+  {
+    id: 'REC-UP-001',
+    name: 'EcoRecycle Apex Solutions India Ltd.',
+    cpcbRegNumber: 'CPCB/EPR/REC/2023/UP/0492',
+    spcbConsentNumber: 'UPPCB/CTO/NOI/2024/9182',
+    city: 'Greater Noida Eco-Tech III',
+    state: 'Uttar Pradesh',
+    coords: [28.5080, 77.4680],
+    annualCapacityTonnes: 45000,
+    recoveryEfficiencyPct: 98.4,
+    streams: ['PCB Hydrometallurgy', 'Li-ion Battery Refining', 'Rare Earth Extraction', 'NIST Data Scrub'],
+    status: 'CPCB Certified',
+    divertedTonnes: 32400,
+    contactEmail: 'compliance@ecorecycle-apex.in'
+  },
+  {
+    id: 'REC-HR-002',
+    name: 'GreenEarth Demanufacturing & Refinery',
+    cpcbRegNumber: 'CPCB/EPR/REC/2022/HR/1104',
+    spcbConsentNumber: 'HSPCB/EWASTE/2023/4521',
+    city: 'Manesar Industrial Area, Gurugram',
+    state: 'Haryana',
+    coords: [28.3650, 76.9200],
+    annualCapacityTonnes: 38000,
+    recoveryEfficiencyPct: 96.2,
+    streams: ['Enterprise IT Disposition', 'Optical Vision Sorting', 'Precious Metal Smelting'],
+    status: 'Operational & Audited',
+    divertedTonnes: 28900,
+    contactEmail: 'ops@greenearthmanesar.com'
+  },
+  {
+    id: 'REC-TG-003',
+    name: 'Deccan Circular Tech & Materials Corp',
+    cpcbRegNumber: 'CPCB/EPR/REC/2023/TG/0843',
+    spcbConsentNumber: 'TSPCB/HW-EPR/HYD/2024/220',
+    city: 'Patancheru Eco Zone, Hyderabad',
+    state: 'Telangana',
+    coords: [17.5340, 78.2560],
+    annualCapacityTonnes: 52000,
+    recoveryEfficiencyPct: 97.8,
+    streams: ['Solar PV Delamination', 'Semiconductor Scrap', 'Telecom Grade Recycling'],
+    status: 'CPCB Certified',
+    divertedTonnes: 41200,
+    contactEmail: 'regulatory@deccancircular.org'
+  },
+  {
+    id: 'REC-MH-004',
+    name: 'Sahyadri Urban Mining & Refurbishing Ltd',
+    cpcbRegNumber: 'CPCB/EPR/REC/2024/MH/0319',
+    spcbConsentNumber: 'MPCB/RO-PUN/EWASTE/2024/774',
+    city: 'Taloja MIDC, Navi Mumbai',
+    state: 'Maharashtra',
+    coords: [19.0720, 73.1250],
+    annualCapacityTonnes: 30000,
+    recoveryEfficiencyPct: 95.5,
+    streams: ['Automated Cable Stripping', 'E-Waste Mechanical Shredding', 'Refurbishing Labs'],
+    status: 'Operational & Audited',
+    divertedTonnes: 21500,
+    contactEmail: 'info@sahyadrimining.co.in'
+  },
+  {
+    id: 'REC-KA-005',
+    name: 'Bengaluru E-Clean Recovery Network',
+    cpcbRegNumber: 'CPCB/EPR/REC/2023/KA/1902',
+    spcbConsentNumber: 'KSPCB/E-WASTE/BLR/2023/651',
+    city: 'Peenya Industrial Estate, Bengaluru',
+    state: 'Karnataka',
+    coords: [13.0380, 77.5180],
+    annualCapacityTonnes: 35000,
+    recoveryEfficiencyPct: 98.1,
+    streams: ['Motherboard Pyrolysis', 'Hydrometallurgical Leaching', 'IEEE 2883 Sanitization'],
+    status: 'CPCB Certified',
+    divertedTonnes: 26100,
+    contactEmail: 'compliance@bengalurueclean.in'
+  },
+  {
+    id: 'REC-TN-006',
+    name: 'Coromandel Green E-Stewards',
+    cpcbRegNumber: 'CPCB/EPR/REC/2024/TN/0155',
+    spcbConsentNumber: 'TNPCB/CHE/E-REG/2024/318',
+    city: 'Sriperumbudur High-Tech SEZ, Chennai',
+    state: 'Tamil Nadu',
+    coords: [12.9900, 79.9500],
+    annualCapacityTonnes: 28000,
+    recoveryEfficiencyPct: 94.8,
+    streams: ['Display Glass CRT/OLED Recovery', 'Copper & Aluminum Smelting'],
+    status: 'Operational & Audited',
+    divertedTonnes: 19800,
+    contactEmail: 'support@coromandelewaste.com'
+  },
+  {
+    id: 'REC-UK-007',
+    name: 'Attero Zero-Discharge Extraction Complex',
+    cpcbRegNumber: 'CPCB/EPR/REC/2021/UK/0088',
+    spcbConsentNumber: 'UKPCB/RO-ROO/EPR/2023/110',
+    city: 'Bhagwanpur, Roorkee',
+    state: 'Uttarakhand',
+    coords: [29.9300, 77.7800],
+    annualCapacityTonnes: 60000,
+    recoveryEfficiencyPct: 99.1,
+    streams: ['Zero Liquid Discharge (ZLD)', 'Lithium Cobalt Recovery', 'Pure Gold Leaching'],
+    status: 'CPCB Certified',
+    divertedTonnes: 49500,
+    contactEmail: 'roorkee@atterorecycling.org'
+  }
+];
 
-    // Section 2: Landfill Occupancy & Leachate Risk
-    content += `--- SECTION 2: MUNICIPAL LANDFILL OCCUPANCY & ENVIRONMENTAL METRICS ---\r\n`;
-    const landfillHeaders = [
-      'Landfill ID',
-      'Facility Name',
-      'City',
-      'State',
-      'Current Capacity (%)',
-      'Saturation Risk Level',
-      'Total E-Waste Diverted to Recyclers (Tonnes)',
-      'Groundwater Leachate Prevented (Liters)',
-      'Nearest Collection Hub',
-      'GPS Coordinates'
-    ];
-    content += landfillHeaders.join(separator) + '\r\n';
+// Traffic Corridors Dataset
+const TRAFFIC_CORRIDORS: TrafficCorridor[] = [
+  {
+    id: 'COR-01',
+    name: 'Delhi NCR -> Greater Noida Expressway Corridor',
+    state: 'Uttar Pradesh / Delhi',
+    level: 'Heavy Congestion',
+    avgSpeedKmph: 32,
+    delayMin: 25,
+    activeTruckCount: 2,
+    color: '#f43f5e',
+    dashArray: '6, 6',
+    note: 'Heavy bottleneck near Pari Chowk & Ghazipur border (+25 min delay)',
+    waypoints: [
+      [28.6315, 77.2167],
+      [28.6139, 77.2450],
+      [28.6080, 77.2950],
+      [28.5800, 77.3200],
+      [28.5355, 77.3910],
+      [28.4900, 77.4400],
+      [28.4715, 77.5100],
+      [28.5080, 77.4680]
+    ]
+  },
+  {
+    id: 'COR-02',
+    name: 'Bengaluru NICE Ring Road Transit Corridor',
+    state: 'Karnataka',
+    level: 'Moderate',
+    avgSpeedKmph: 52,
+    delayMin: 8,
+    activeTruckCount: 1,
+    color: '#f59e0b',
+    note: 'Steady transit flow via NICE Cloverleaf toll plazas (+8 min delay)',
+    waypoints: [
+      [12.8452, 77.6602],
+      [12.8870, 77.5920],
+      [12.9141, 77.5385],
+      [12.9550, 77.5100],
+      [12.9750, 77.4980],
+      [13.0310, 77.5260]
+    ]
+  },
+  {
+    id: 'COR-03',
+    name: 'Mumbai Sion-Panvel to Taloja MIDC Arterial',
+    state: 'Maharashtra',
+    level: 'Heavy Congestion',
+    avgSpeedKmph: 26,
+    delayMin: 22,
+    activeTruckCount: 1,
+    color: '#f43f5e',
+    dashArray: '6, 6',
+    note: 'Vashi Bridge freight inspection lane crawl (+22 min delay)',
+    waypoints: [
+      [19.0600, 72.8700],
+      [19.0500, 72.9300],
+      [19.0350, 73.0100],
+      [19.0400, 73.0800],
+      [19.0720, 73.1250]
+    ]
+  },
+  {
+    id: 'COR-04',
+    name: 'Hyderabad Outer Ring Road (ORR) Expressway',
+    state: 'Telangana',
+    level: 'Clear',
+    avgSpeedKmph: 74,
+    delayMin: 0,
+    activeTruckCount: 1,
+    color: '#10b981',
+    note: 'High-speed green transit lane clear to Patancheru Eco Zone',
+    waypoints: [
+      [17.4400, 78.3800],
+      [17.4700, 78.3400],
+      [17.5100, 78.3000],
+      [17.5340, 78.2560]
+    ]
+  },
+  {
+    id: 'COR-05',
+    name: 'Chennai Guindy to Sriperumbudur SEZ (NH-48)',
+    state: 'Tamil Nadu',
+    level: 'Moderate',
+    avgSpeedKmph: 46,
+    delayMin: 6,
+    activeTruckCount: 1,
+    color: '#f59e0b',
+    note: 'Standard commercial freight flow at Sriperumbudur Toll',
+    waypoints: [
+      [13.0067, 80.2000],
+      [13.0100, 80.1200],
+      [12.9900, 80.0500],
+      [12.9800, 79.9400]
+    ]
+  }
+];
 
-    LANDFILL_CLUSTERS.forEach((lf) => {
-      const row = [
-        `"${lf.id}"`,
-        `"${lf.name}"`,
-        `"${lf.city}"`,
-        `"${lf.state}"`,
-        lf.currentCapacityPct,
-        `"${lf.riskLevel}"`,
-        lf.totalEwasteDivertedTonnes,
-        lf.leachatePreventedLiters,
-        `"${lf.nearestCollectionHub}"`,
-        `"${lf.coordinates[0]}, ${lf.coordinates[1]}"`
-      ];
-      content += row.join(separator) + '\r\n';
-    });
-
-    const mimeType = format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/vnd.ms-excel;charset=utf-8;';
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `CPCB_National_Fleet_Landfill_Telemetry_${timestamp}.${extension}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    setExportSuccessMessage(
-      `Real-time telemetry successfully exported as ${format.toUpperCase()} (${extension.toUpperCase()}) for offline analytics!`
-    );
-    setTimeout(() => setExportSuccessMessage(null), 5000);
+// Helper to determine color category matching Screenshot 2
+const getStatusTheme = (pct: number) => {
+  if (pct > 80) {
+    return {
+      label: '>80% Recycled',
+      haloClass: 'bg-emerald-400',
+      bgClass: 'bg-emerald-950/95 border-emerald-400 text-emerald-300 shadow-emerald-500/25',
+      textPctClass: 'text-emerald-300'
+    };
+  }
+  if (pct >= 40) {
+    return {
+      label: '40-80%',
+      haloClass: 'bg-amber-400',
+      bgClass: 'bg-amber-950/95 border-amber-400 text-amber-300 shadow-amber-500/25',
+      textPctClass: 'text-amber-300'
+    };
+  }
+  return {
+    label: '<40% Lagging',
+    haloClass: 'bg-rose-500',
+    bgClass: 'bg-rose-950/95 border-rose-500 text-rose-300 shadow-rose-500/25',
+    textPctClass: 'text-rose-300'
   };
+};
 
-  return (
-    <div className="space-y-6">
-      {/* Export Notification Toast */}
-      {exportSuccessMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 text-xs flex items-center justify-between shadow-lg shadow-emerald-950/50 animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-semibold">{exportSuccessMessage}</span>
-          </div>
-          <button
-            onClick={() => setExportSuccessMessage(null)}
-            className="text-emerald-400 hover:text-white text-xs px-2 py-0.5"
-          >
-            Dismiss
-          </button>
+export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.memo(({
+  devices = [],
+  onSelectDevice
+}) => {
+  // Read CARTO API key from env with default fallback to user's provided key
+  const cartoApiKey =
+    (import.meta as any).env?.VITE_CARTO_API_KEY ||
+    (import.meta as any).env?.NEXT_PUBLIC_CARTO_API_KEY ||
+    (import.meta as any).env?.REACT_APP_MAP_API_KEY ||
+    'cb1_4sqy_1_15a3fad41d4a776cdaf03ad0';
+
+  // Trucks and Selection State
+  const [trucks, setTrucks] = useState<FleetTruck[]>(FLEET_TRUCKS);
+  const [selectedTruckId, setSelectedTruckId] = useState<string>(FLEET_TRUCKS[0].id);
+
+  // Map Mode: 'live' (Live Fleet Map) vs 'gis' (National Fleet & Landfill Spatial Grid)
+  const [mapMode, setMapMode] = useState<'live' | 'gis'>('live');
+
+  // Layer Controls State: Traffic Density, Logistics Hubs, Recycling Facilities
+  const [activeLayers, setActiveLayers] = useState<{
+    traffic: boolean;
+    hubs: boolean;
+    recyclers: boolean;
+  }>({
+    traffic: true,
+    hubs: true,
+    recyclers: true
+  });
+
+  // Layer control popup dropdown state
+  const [showLayerMenu, setShowLayerMenu] = useState<boolean>(false);
+
+  // Simulation controls
+  const [isSimulating, setIsSimulating] = useState<boolean>(true);
+  const [simulationSpeed, setSimulationSpeed] = useState<number>(1); // 1x, 2x, 4x
+
+  // Table filters & search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStateFilter, setSelectedStateFilter] = useState('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
+  const [selectedTrafficFilter, setSelectedTrafficFilter] = useState('ALL');
+
+  // Route history tab
+  const [routeHistoryTab, setRouteHistoryTab] = useState<'active' | 'past'>('active');
+
+  // Leaflet Map Refs
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Dedicated LayerGroups for high-performance toggling without marker recreation
+  const polylineLayerRef = useRef<L.LayerGroup | null>(null);
+  const stateMarkersLayerRef = useRef<L.LayerGroup | null>(null);
+  const trucksLayerRef = useRef<L.LayerGroup | null>(null);
+  const trafficLayerRef = useRef<L.LayerGroup | null>(null);
+  const hubsLayerRef = useRef<L.LayerGroup | null>(null);
+  const recyclersLayerRef = useRef<L.LayerGroup | null>(null);
+  const hazardCircleRef = useRef<L.Circle | null>(null);
+
+  // Marker reference caches to avoid creating DOM nodes during animation ticks
+  const truckMarkersRef = useRef<Record<string, L.Marker>>({});
+  const hubMarkersRef = useRef<Record<string, L.Marker>>({});
+  const recyclerMarkersRef = useRef<Record<string, L.Marker>>({});
+  const stateMarkersRef = useRef<Record<string, L.Marker>>({});
+
+  // Selected truck object
+  const selectedTruck = useMemo(() => {
+    return trucks.find((t) => t.id === selectedTruckId) || trucks[0];
+  }, [trucks, selectedTruckId]);
+
+  // Memoized Device-Derived Metrics (prevents map thrashing when device state changes)
+  const deviceMetrics = useMemo(() => {
+    const inTransitCount = devices.filter(
+      (d) => d.status === 'READY_FOR_DISPATCH' || d.status === 'FACTORY_INSPECTION' || d.status === 'ACCEPTED'
+    ).length;
+    const totalWeightInTransitKg = devices
+      .filter((d) => d.status === 'READY_FOR_DISPATCH' || d.status === 'FACTORY_INSPECTION' || d.status === 'ACCEPTED')
+      .reduce((acc, curr) => acc + (curr.intakeWeightKg || 0.4), 0);
+    return {
+      inTransitCount,
+      totalWeightInTransitKg: Math.round(totalWeightInTransitKg * 10) / 10
+    };
+  }, [devices]);
+
+  // Filtered trucks for roster table
+  const filteredTrucks = useMemo(() => {
+    return trucks.filter((t) => {
+      const q = searchQuery.toLowerCase();
+      const matchSearch =
+        q === '' ||
+        t.vehicleNumber.toLowerCase().includes(q) ||
+        t.id.toLowerCase().includes(q) ||
+        t.driverName.toLowerCase().includes(q) ||
+        t.currentRoute.toLowerCase().includes(q);
+
+      const matchState =
+        selectedStateFilter === 'ALL' ||
+        t.state.toLowerCase() === selectedStateFilter.toLowerCase();
+
+      const matchStatus =
+        selectedStatusFilter === 'ALL' || t.status === selectedStatusFilter;
+
+      const matchTraffic =
+        selectedTrafficFilter === 'ALL' || t.trafficLevel === selectedTrafficFilter;
+
+      return matchSearch && matchState && matchStatus && matchTraffic;
+    });
+  }, [trucks, searchQuery, selectedStateFilter, selectedStatusFilter, selectedTrafficFilter]);
+
+  // Memoized Marker Generator Helpers
+  const createTruckIcon = useCallback((isSelected: boolean) => {
+    const truckHtml = `
+      <div class="relative flex items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none">
+        ${
+          isSelected
+            ? '<span class="animate-ping absolute inline-flex h-9 w-9 rounded-full bg-emerald-400 opacity-60"></span>'
+            : ''
+        }
+        <div class="relative w-7 h-7 rounded-lg ${
+          isSelected
+            ? 'bg-[#10b981] text-slate-950 ring-2 ring-emerald-300'
+            : 'bg-slate-900 border border-emerald-400/80 text-emerald-400'
+        } flex items-center justify-center shadow-lg shadow-emerald-500/30">
+          <svg class="w-4 h-4 ${isSelected ? 'text-slate-950' : 'text-emerald-400'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+            <path d="M15 18H9"/>
+            <path d="M19 18h2a1 1 0 0 0 1-1v-5.2a1 1 0 0 0-.28-.7L18.8 8H15v10z"/>
+            <circle cx="7" cy="18" r="2"/>
+            <circle cx="17" cy="18" r="2"/>
+          </svg>
         </div>
-      )}
+      </div>
+    `;
 
-      {/* Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/70 via-slate-900 to-indigo-950/60 border border-blue-800/50 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs font-semibold border border-blue-500/20">
-            <Navigation className="w-3.5 h-3.5" />
-            <span>National Spatial GIS Fleet & Landfill Telemetry</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-1">
-            Real-Time Logistics Fleet & Landfill Spatial Grid
-          </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Live corridor dispatch monitoring, predictive maintenance for collection trucks, and municipal landfill saturation warning alerts across Indian states.
-          </p>
+    return L.divIcon({
+      className: 'custom-truck-marker',
+      html: truckHtml,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+  }, []);
+
+  const createHubMarker = useCallback((hub: LogisticsHub) => {
+    const html = `
+      <div class="relative flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none group">
+        <div class="absolute -inset-1 rounded-full bg-cyan-400 opacity-30 blur-[2px] group-hover:opacity-75 transition-opacity"></div>
+        <div class="relative w-7 h-7 rounded-lg bg-slate-900 border-2 border-cyan-400 text-cyan-300 flex items-center justify-center shadow-lg shadow-cyan-500/25 transition-transform group-hover:scale-115">
+          <svg class="w-3.5 h-3.5 text-cyan-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/>
+            <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/>
+            <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
+            <path d="M10 6h4"/>
+            <path d="M10 10h4"/>
+            <path d="M10 14h4"/>
+            <path d="M10 18h4"/>
+          </svg>
         </div>
+        <div class="absolute -bottom-4 bg-slate-950/90 text-cyan-300 border border-cyan-800 text-[8px] font-mono px-1 rounded whitespace-nowrap shadow">
+          ${hub.code}
+        </div>
+      </div>
+    `;
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Heatmap Toggle */}
-          <button
-            onClick={() => setGisHeatmapActive(!gisHeatmapActive)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition border ${
-              gisHeatmapActive
-                ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-500/20'
-                : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>{gisHeatmapActive ? 'GIS Heatmap: ON' : 'GIS Heatmap: OFF'}</span>
-          </button>
+    const icon = L.divIcon({
+      className: 'custom-hub-marker',
+      html,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
 
-          {/* Export Telemetry Metrics Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 transition flex items-center gap-2 shadow-md shadow-emerald-600/20"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Telemetry</span>
-            </button>
-
-            {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-1.5 z-30 space-y-1">
-                <button
-                  onClick={() => handleExportTelemetry('csv')}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <div className="font-semibold">Export as CSV</div>
-                    <div className="text-[10px] text-slate-400">Comma-separated values (.csv)</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => handleExportTelemetry('excel')}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
-                  <div>
-                    <div className="font-semibold">Export for Excel</div>
-                    <div className="text-[10px] text-slate-400">Tab-delimited workbook (.xls)</div>
-                  </div>
-                </button>
-              </div>
-            )}
+    const marker = L.marker(hub.coords, { icon });
+    const popupHtml = `
+      <div style="font-family: Satoshi, sans-serif; min-width: 220px; color: #f8fafc; padding: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px;">
+          <div>
+            <div style="font-size: 10px; color: #38bdf8; font-weight: bold; text-transform: uppercase;">Logistics Hub</div>
+            <strong style="color: #fff; font-size: 12px;">${hub.name}</strong>
+          </div>
+          <span style="font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 4px; background: #0c4a6e; color: #38bdf8;">${hub.code}</span>
+        </div>
+        <div style="font-size: 11px; line-height: 1.45; color: #cbd5e1; font-family: monospace;">
+          <div>Location: <strong style="color: #f1f5f9;">${hub.city}, ${hub.state}</strong></div>
+          <div>Daily Intake: <strong style="color: #38bdf8;">${hub.currentIntakeKg.toLocaleString()} / ${hub.dailyCapacityKg.toLocaleString()} kg</strong></div>
+          <div>Dock Bays: <strong style="color: #10b981;">${hub.dockBays} Active Bays</strong></div>
+          <div>Active Fleet: <strong style="color: #fbbf24;">${hub.activeVehicles} Vehicles</strong></div>
+          <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #334155; font-size: 10px; color: #94a3b8; font-family: sans-serif;">
+            Coordinator: ${hub.contactPerson} (${hub.contactPhone})
           </div>
         </div>
       </div>
+    `;
+    marker.bindPopup(popupHtml, { closeButton: false, className: 'custom-leaflet-popup' });
+    return marker;
+  }, []);
 
-      {/* Main Grid: Map & Fleet Telemetry */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Side: National Fleet & Landfill Spatial Grid Map (Interactive India Map) */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 relative flex flex-col">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-cyan-400" />
-                <span>National Fleet & Landfill Spatial Grid</span>
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Hover over state symbols to reveal real-time e-waste generation clusters & landfill buffers
-              </p>
+  const createRecyclerMarker = useCallback((facility: RecyclingFacility) => {
+    const html = `
+      <div class="relative flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none group">
+        <div class="absolute -inset-1 rounded-full bg-emerald-400 opacity-30 blur-[2px] group-hover:opacity-75 transition-opacity"></div>
+        <div class="relative w-7 h-7 rounded-lg bg-emerald-950 border-2 border-emerald-400 text-emerald-300 flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-transform group-hover:scale-115">
+          <svg class="w-3.5 h-3.5 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5"/>
+            <path d="M11 19h8.2a1.8 1.8 0 0 0 1.57-.88 1.8 1.8 0 0 0 .004-1.78l-3.95-6.84"/>
+            <path d="M14 5l-2.45 4.25"/>
+            <path d="M9.55 9.25 12 5l2.45 4.25"/>
+          </svg>
+        </div>
+        <div class="absolute -bottom-4 bg-slate-950/90 text-emerald-300 border border-emerald-800 text-[8px] font-mono px-1 rounded whitespace-nowrap shadow">
+          ${facility.recoveryEfficiencyPct}% REC
+        </div>
+      </div>
+    `;
+
+    const icon = L.divIcon({
+      className: 'custom-recycler-marker',
+      html,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const marker = L.marker(facility.coords, { icon });
+    const popupHtml = `
+      <div style="font-family: Satoshi, sans-serif; min-width: 230px; color: #f8fafc; padding: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px;">
+          <div>
+            <div style="font-size: 10px; color: #34d399; font-weight: bold; text-transform: uppercase;">CPCB Recycling Plant</div>
+            <strong style="color: #fff; font-size: 12px;">${facility.name}</strong>
+          </div>
+          <span style="font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 4px; background: #064e3b; color: #34d399;">CPCB VALID</span>
+        </div>
+        <div style="font-size: 11px; line-height: 1.45; color: #cbd5e1; font-family: monospace;">
+          <div>CPCB Reg: <span style="color: #94a3b8;">${facility.cpcbRegNumber}</span></div>
+          <div>Annual Cap: <strong style="color: #f1f5f9;">${facility.annualCapacityTonnes.toLocaleString()} Tonnes/yr</strong></div>
+          <div>Recovery Efficiency: <strong style="color: #34d399;">${facility.recoveryEfficiencyPct}%</strong></div>
+          <div>Streams: <span style="color: #38bdf8;">${facility.streams.slice(0, 2).join(', ')}</span></div>
+          <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #334155; font-size: 10px; color: #94a3b8; font-family: sans-serif;">
+            Inquiries: ${facility.contactEmail}
+          </div>
+        </div>
+      </div>
+    `;
+    marker.bindPopup(popupHtml, { closeButton: false, className: 'custom-leaflet-popup' });
+    return marker;
+  }, []);
+
+  // 1. Initialize Leaflet Map and Persistent LayerGroups ONCE
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    const initialCoords: [number, number] = [28.5355, 77.391];
+    const map = L.map(mapContainerRef.current, {
+      center: initialCoords,
+      zoom: 11,
+      zoomControl: false,
+      attributionControl: false
+    });
+
+    const tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`;
+    const tileLayer = L.tileLayer(tileUrl, {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      attribution: 'Leaflet | Tiles © CARTO © Esri'
+    }).addTo(map);
+    tileLayerRef.current = tileLayer;
+
+    // Create Dedicated LayerGroups attached to map
+    const polylineLayer = L.layerGroup().addTo(map);
+    polylineLayerRef.current = polylineLayer;
+
+    const trafficLayer = L.layerGroup().addTo(map);
+    trafficLayerRef.current = trafficLayer;
+
+    const hubsLayer = L.layerGroup().addTo(map);
+    hubsLayerRef.current = hubsLayer;
+
+    const recyclersLayer = L.layerGroup().addTo(map);
+    recyclersLayerRef.current = recyclersLayer;
+
+    const stateLayer = L.layerGroup();
+    stateMarkersLayerRef.current = stateLayer;
+
+    const trucksLayer = L.layerGroup().addTo(map);
+    trucksLayerRef.current = trucksLayer;
+
+    // Build Static Hubs Layer Once
+    LOGISTICS_HUBS.forEach((hub) => {
+      const marker = createHubMarker(hub);
+      hubMarkersRef.current[hub.id] = marker;
+      hubsLayer.addLayer(marker);
+    });
+
+    // Build Static Recyclers Layer Once
+    RECYCLING_FACILITIES.forEach((facility) => {
+      const marker = createRecyclerMarker(facility);
+      recyclerMarkersRef.current[facility.id] = marker;
+      recyclersLayer.addLayer(marker);
+    });
+
+    // Build Static Traffic Corridors Layer Once
+    TRAFFIC_CORRIDORS.forEach((corridor) => {
+      // Glow polyline
+      const glowLine = L.polyline(corridor.waypoints, {
+        color: corridor.color,
+        weight: corridor.level === 'Heavy Congestion' ? 7 : 5,
+        opacity: 0.35,
+        dashArray: corridor.dashArray
+      });
+      trafficLayer.addLayer(glowLine);
+
+      // Core polyline
+      const coreLine = L.polyline(corridor.waypoints, {
+        color: corridor.color,
+        weight: 3,
+        opacity: 0.9,
+        dashArray: corridor.dashArray
+      });
+
+      const popupContent = `
+        <div style="font-family: Satoshi, sans-serif; min-width: 200px; color: #f8fafc; padding: 4px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 3px; margin-bottom: 4px;">
+            <strong style="color: #fff; font-size: 11px;">${corridor.name}</strong>
+            <span style="font-size: 8px; font-weight: bold; padding: 1px 5px; border-radius: 3px; background: ${
+              corridor.level === 'Heavy Congestion'
+                ? '#881337'
+                : corridor.level === 'Moderate'
+                ? '#78350f'
+                : '#064e3b'
+            }; color: ${
+              corridor.level === 'Heavy Congestion'
+                ? '#fda4af'
+                : corridor.level === 'Moderate'
+                ? '#fde68a'
+                : '#6ee7b7'
+            };">${corridor.level}</span>
+          </div>
+          <div style="font-size: 10px; line-height: 1.4; color: #cbd5e1; font-family: monospace;">
+            <div>Speed: <strong style="color: #38bdf8;">${corridor.avgSpeedKmph} km/h</strong></div>
+            <div>Delay Factor: <strong style="color: #f43f5e;">+${corridor.delayMin} min</strong></div>
+            <div>Active Freight: <strong style="color: #10b981;">${corridor.activeTruckCount} Trucks</strong></div>
+            <div style="margin-top: 3px; color: #94a3b8; font-family: sans-serif; font-size: 9px;">${corridor.note}</div>
+          </div>
+        </div>
+      `;
+      coreLine.bindPopup(popupContent, { closeButton: false, className: 'custom-leaflet-popup' });
+      trafficLayer.addLayer(coreLine);
+    });
+
+    // Build Static State Nodes Layer Once
+    GIS_STATES.forEach((st) => {
+      const theme = getStatusTheme(st.recyclingRatePct);
+      const html = `
+        <div class="relative flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none group">
+          <div class="absolute -inset-1 rounded-full ${theme.haloClass} opacity-35 blur-[2.5px] group-hover:opacity-75 transition-opacity"></div>
+          <div class="relative w-8 h-8 rounded-full border-2 ${theme.bgClass} flex flex-col items-center justify-center text-center shadow-lg transition-transform group-hover:scale-115">
+            <span class="text-[9px] font-bold font-mono tracking-tight text-white leading-none">${st.code}</span>
+            <span class="text-[8px] font-mono font-semibold ${theme.textPctClass} leading-none mt-0.5">${st.recyclingRatePct}%</span>
+          </div>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: 'custom-state-node-marker',
+        html,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      const marker = L.marker(st.coords, { icon });
+      const popupContent = `
+        <div style="font-family: Satoshi, sans-serif; min-width: 180px; color: #f8fafc; padding: 4px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 3px; margin-bottom: 4px;">
+            <strong style="color: #38bdf8; font-size: 12px;">${st.name} (${st.code})</strong>
+            <span style="font-size: 9px; font-weight: bold; padding: 1px 5px; border-radius: 4px; background: #064e3b; color: #34d399;">${theme.label}</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.4; color: #cbd5e1; font-family: monospace;">
+            <div>E-Waste: <strong style="color: #fff;">${st.ewasteGenerationTons.toLocaleString()} T/yr</strong></div>
+            <div>Formal Recycled: <strong style="color: #38bdf8;">${st.recyclingRatePct}%</strong></div>
+            <div>Regional Hub: <span style="color: #94a3b8; font-family: sans-serif;">${st.hubCity}</span></div>
+            <div>Active Fleet: <strong style="color: #10b981;">${st.activeTrucks} vehicles</strong></div>
+          </div>
+        </div>
+      `;
+
+      marker.bindPopup(popupContent, { closeButton: false, className: 'custom-leaflet-popup' });
+      marker.on('click', () => {
+        if (st.stateFilterValue !== 'ALL') {
+          setSelectedStateFilter(st.stateFilterValue);
+        }
+        if (st.truckId) {
+          setSelectedTruckId(st.truckId);
+        }
+        setMapMode('live');
+      });
+
+      stateMarkersRef.current[st.code] = marker;
+      stateLayer.addLayer(marker);
+    });
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, [cartoApiKey, createHubMarker, createRecyclerMarker]);
+
+  // 2. High-Performance Layer Visibility Toggles (Zero marker recreation)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Traffic Density Layer Toggle
+    if (trafficLayerRef.current) {
+      if (activeLayers.traffic) {
+        if (!map.hasLayer(trafficLayerRef.current)) {
+          map.addLayer(trafficLayerRef.current);
+        }
+      } else {
+        if (map.hasLayer(trafficLayerRef.current)) {
+          map.removeLayer(trafficLayerRef.current);
+        }
+      }
+    }
+
+    // Logistics Hubs Layer Toggle
+    if (hubsLayerRef.current) {
+      if (activeLayers.hubs) {
+        if (!map.hasLayer(hubsLayerRef.current)) {
+          map.addLayer(hubsLayerRef.current);
+        }
+      } else {
+        if (map.hasLayer(hubsLayerRef.current)) {
+          map.removeLayer(hubsLayerRef.current);
+        }
+      }
+    }
+
+    // Recycling Facilities Layer Toggle
+    if (recyclersLayerRef.current) {
+      if (activeLayers.recyclers) {
+        if (!map.hasLayer(recyclersLayerRef.current)) {
+          map.addLayer(recyclersLayerRef.current);
+        }
+      } else {
+        if (map.hasLayer(recyclersLayerRef.current)) {
+          map.removeLayer(recyclersLayerRef.current);
+        }
+      }
+    }
+  }, [activeLayers]);
+
+  // 3. Map Mode Switch & Route Drawing (Only runs on mode switch or selectedTruckId change)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const polylineLayer = polylineLayerRef.current;
+    const stateLayer = stateMarkersLayerRef.current;
+    const trucksLayer = trucksLayerRef.current;
+    if (!map || !polylineLayer || !stateLayer || !trucksLayer) return;
+
+    polylineLayer.clearLayers();
+
+    if (hazardCircleRef.current) {
+      hazardCircleRef.current.remove();
+      hazardCircleRef.current = null;
+    }
+
+    if (mapMode === 'gis') {
+      // GIS Grid Mode: Zoom out to view entire India spatial grid
+      map.flyTo([22.8, 78.9], 5, { duration: 0.8 });
+
+      // Show state nodes
+      if (!map.hasLayer(stateLayer)) {
+        map.addLayer(stateLayer);
+      }
+
+      // Hide truck markers in GIS Grid mode for clear spatial overview
+      if (map.hasLayer(trucksLayer)) {
+        map.removeLayer(trucksLayer);
+      }
+    } else {
+      // Live Map Mode: Focus on selected truck's route corridor
+      const currentCoords = selectedTruck.coordinates;
+      map.flyTo(currentCoords, 11, { duration: 0.7 });
+
+      // Hide state nodes, show trucks
+      if (map.hasLayer(stateLayer)) {
+        map.removeLayer(stateLayer);
+      }
+      if (!map.hasLayer(trucksLayer)) {
+        map.addLayer(trucksLayer);
+      }
+
+      // Ensure truck markers exist in trucksLayer with updated selection icon
+      trucks.forEach((truck) => {
+        const isSelected = truck.id === selectedTruckId;
+        const icon = createTruckIcon(isSelected);
+
+        if (truckMarkersRef.current[truck.id]) {
+          const marker = truckMarkersRef.current[truck.id];
+          marker.setIcon(icon);
+          if (!trucksLayer.hasLayer(marker)) {
+            trucksLayer.addLayer(marker);
+          }
+        } else {
+          const marker = L.marker(truck.coordinates, { icon });
+          marker.on('click', () => {
+            setSelectedTruckId(truck.id);
+          });
+          truckMarkersRef.current[truck.id] = marker;
+          trucksLayer.addLayer(marker);
+        }
+      });
+
+      // Render Route Polylines for selected truck
+      if (selectedTruck.gpsWaypoints && selectedTruck.gpsWaypoints.length > 1) {
+        // Glow line
+        const glowLine = L.polyline(selectedTruck.gpsWaypoints, {
+          color: '#10b981',
+          weight: 6,
+          opacity: 0.35
+        });
+        polylineLayer.addLayer(glowLine);
+
+        // Core line
+        const routeLine = L.polyline(selectedTruck.gpsWaypoints, {
+          color: '#10b981',
+          weight: 3.5,
+          opacity: 0.95
+        });
+        polylineLayer.addLayer(routeLine);
+
+        // Origin
+        const originMarker = L.circleMarker(selectedTruck.gpsWaypoints[0], {
+          radius: 4.5,
+          color: '#10b981',
+          fillColor: '#047857',
+          fillOpacity: 1,
+          weight: 2
+        });
+        polylineLayer.addLayer(originMarker);
+
+        // Waypoints
+        selectedTruck.gpsWaypoints.slice(1, -1).forEach((pt) => {
+          const wpMarker = L.circleMarker(pt, {
+            radius: 3,
+            color: '#38bdf8',
+            fillColor: '#0284c7',
+            fillOpacity: 0.8,
+            weight: 1.5
+          });
+          polylineLayer.addLayer(wpMarker);
+        });
+
+        // Destination
+        const destMarker = L.circleMarker(
+          selectedTruck.gpsWaypoints[selectedTruck.gpsWaypoints.length - 1],
+          {
+            radius: 5.5,
+            color: '#38bdf8',
+            fillColor: '#0f172a',
+            fillOpacity: 1,
+            weight: 2.5
+          }
+        );
+        polylineLayer.addLayer(destMarker);
+      }
+
+      // Ghazipur Hazard Zone Buffer
+      if (selectedTruck.id === 'TRK-IND-01') {
+        const hazardCircle = L.circle([28.6284, 77.3292], {
+          radius: 3500,
+          color: '#f43f5e',
+          fillColor: '#f43f5e',
+          fillOpacity: 0.12,
+          weight: 1.5,
+          dashArray: '4, 4'
+        }).addTo(map);
+        hazardCircleRef.current = hazardCircle;
+      }
+    }
+  }, [mapMode, selectedTruckId, createTruckIcon, selectedTruck]);
+
+  // 4. Lightweight GPS Coordinate Updater (Updates markers in-place without re-rendering layers)
+  useEffect(() => {
+    trucks.forEach((truck) => {
+      const marker = truckMarkersRef.current[truck.id];
+      if (marker) {
+        marker.setLatLng(truck.coordinates);
+      }
+    });
+  }, [trucks]);
+
+  // 5. Real-time GPS movement simulation tick
+  useEffect(() => {
+    if (!isSimulating) return;
+
+    const intervalTime = 1200 / simulationSpeed;
+    const interval = setInterval(() => {
+      setTrucks((prevTrucks) =>
+        prevTrucks.map((truck) => {
+          if (truck.status === 'At Collection Point') return truck;
+
+          const waypoints = truck.gpsWaypoints || [];
+          if (waypoints.length < 2) return truck;
+
+          const currentPct = truck.routeProgressPct ?? 50;
+          let newPct = currentPct + 0.6 * simulationSpeed;
+          if (newPct >= 100) newPct = 0;
+
+          const totalSegments = waypoints.length - 1;
+          const segmentIndex = Math.min(
+            Math.floor((newPct / 100) * totalSegments),
+            totalSegments - 1
+          );
+          const segmentProgress = (newPct / 100) * totalSegments - segmentIndex;
+
+          const p1 = waypoints[segmentIndex];
+          const p2 = waypoints[segmentIndex + 1];
+
+          const curLat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
+          const curLng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+
+          return {
+            ...truck,
+            coordinates: [curLat, curLng],
+            routeProgressPct: Math.round(newPct)
+          };
+        })
+      );
+    }, intervalTime);
+
+    return () => clearInterval(interval);
+  }, [isSimulating, simulationSpeed]);
+
+  const handleZoomIn = () => {
+    mapInstanceRef.current?.zoomIn();
+  };
+
+  const handleZoomOut = () => {
+    mapInstanceRef.current?.zoomOut();
+  };
+
+  const toggleAllIndiaCorridor = () => {
+    if (mapMode === 'live') {
+      setMapMode('gis');
+    } else {
+      setMapMode('live');
+    }
+  };
+
+  const toggleLayer = (layerKey: 'traffic' | 'hubs' | 'recyclers') => {
+    setActiveLayers((prev) => ({
+      ...prev,
+      [layerKey]: !prev[layerKey]
+    }));
+  };
+
+  const activeLayerCount = Object.values(activeLayers).filter(Boolean).length;
+
+  return (
+    <div className="w-full space-y-2.5">
+      {/* ========================================================= */}
+      {/* SECTION 1: TOP SECTION (LIVE MAP / GIS GRID + TELEMETRY)  */}
+      {/* ========================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+        {/* LEFT COLUMN: LIVE MAP & GIS SPATIAL GRID CARD */}
+        <div className="lg:col-span-7 xl:col-span-8 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative shadow-lg flex flex-col h-[340px] sm:h-[355px]">
+          {/* Card Header */}
+          <div className="px-3.5 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div>
+                <h3 className="text-xs font-bold text-white font-sans flex items-center gap-2">
+                  {mapMode === 'live' ? 'Live Fleet Map' : 'National Fleet & Landfill Spatial Grid'}
+                </h3>
+                <p className="text-[10px] text-slate-400">
+                  {mapMode === 'live'
+                    ? 'Real-time truck positions along assigned corridors • click a truck to inspect'
+                    : 'Hover over state symbols to reveal real-time e-waste generation clusters & landfill buffers'}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 font-mono text-[10px]">
-              <span className="flex items-center gap-1 text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" /> &gt;80% Recycled
-              </span>
-              <span className="flex items-center gap-1 text-amber-400">
-                <span className="w-2 h-2 rounded-full bg-amber-400" /> 40-80%
-              </span>
-              <span className="flex items-center gap-1 text-rose-400">
-                <span className="w-2 h-2 rounded-full bg-rose-400" /> &lt;40% Lagging
-              </span>
+
+            {/* Right side of header: Legend (when in GIS) + [Live Map] [GIS Grid] Toggle */}
+            <div className="flex items-center gap-2.5">
+              {/* GIS Grid Mode Legend */}
+              {mapMode === 'gis' && (
+                <div className="hidden sm:flex items-center gap-3 text-[10px] font-mono">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span className="text-emerald-400 font-semibold">&gt;80% Recycled</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <span className="text-amber-400 font-semibold">40-80%</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                    <span className="text-rose-400 font-semibold">&lt;40% Lagging</span>
+                  </div>
+                </div>
+              )}
+
+              {/* [Live Map] / [GIS Grid] Toggle Pill */}
+              <div className="flex items-center rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                <button
+                  onClick={() => setMapMode('live')}
+                  className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition ${
+                    mapMode === 'live'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Live Map
+                </button>
+                <button
+                  onClick={() => setMapMode('gis')}
+                  className={`px-2.5 py-0.5 rounded text-[11px] font-semibold transition ${
+                    mapMode === 'gis'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  GIS Grid
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Interactive Spatial Grid Canvas Container */}
-          <div className="flex-1 min-h-[460px] bg-slate-950 rounded-2xl border border-slate-800/80 relative overflow-hidden flex items-center justify-center p-4">
-            {/* Ambient India Boundary Silhouette */}
-            <svg
-              viewBox="0 0 100 100"
-              className="w-full h-full max-h-[440px] select-none pointer-events-none opacity-20 stroke-slate-600 fill-slate-900/50"
-            >
-              {/* Generalized India outline coordinates for spatial reference */}
-              <polygon points="32,8 40,12 45,18 42,26 55,30 65,34 72,40 76,46 68,52 64,60 52,70 44,88 38,82 32,70 28,58 20,44 24,32 30,20 28,12" />
-            </svg>
+          {/* Map Canvas Container */}
+          <div className="relative flex-1 w-full bg-[#0b1320] overflow-hidden">
+            <div ref={mapContainerRef} className="w-full h-full" />
 
-            {/* GIS Heatmap overlay circles */}
-            {gisHeatmapActive && (
-              <div className="absolute inset-0 pointer-events-none">
-                {/* UP Cluster */}
-                <div className="absolute top-[34%] left-[48%] -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full bg-emerald-500/15 blur-2xl animate-pulse" />
-                {/* Delhi NCR Cluster */}
-                <div className="absolute top-[30%] left-[36%] -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-amber-500/20 blur-xl animate-pulse" />
-                {/* Maharashtra Cluster */}
-                <div className="absolute top-[56%] left-[34%] -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-rose-500/15 blur-2xl" />
-                {/* Telangana Cluster */}
-                <div className="absolute top-[64%] left-[44%] -translate-x-1/2 -translate-y-1/2 w-36 h-36 rounded-full bg-emerald-500/15 blur-2xl" />
-                {/* Karnataka / Bengaluru */}
-                <div className="absolute top-[74%] left-[36%] -translate-x-1/2 -translate-y-1/2 w-36 h-36 rounded-full bg-cyan-500/15 blur-2xl" />
-              </div>
-            )}
+            {/* Top-Left Zoom Controls */}
+            <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 shadow-md">
+              <button
+                onClick={handleZoomIn}
+                className="w-6 h-6 bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 rounded flex items-center justify-center font-bold text-xs transition"
+                title="Zoom in"
+              >
+                +
+              </button>
+              <button
+                onClick={handleZoomOut}
+                className="w-6 h-6 bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700/80 rounded flex items-center justify-center font-bold text-xs transition"
+                title="Zoom out"
+              >
+                −
+              </button>
+            </div>
 
-            {/* State Cluster Symbols - spread out, figures/signs only, details on hover */}
-            {stateNodes.map((st) => {
-              const isHovered = hoveredState === st.id;
-              const colorClass =
-                st.rate >= 80
-                  ? 'border-emerald-500/70 text-emerald-300 bg-emerald-950/80 shadow-emerald-500/20'
-                  : st.rate >= 40
-                  ? 'border-amber-500/70 text-amber-300 bg-amber-950/80 shadow-amber-500/20'
-                  : 'border-rose-500/70 text-rose-300 bg-rose-950/80 shadow-rose-500/20';
-
-              return (
-                <div
-                  key={st.id}
-                  style={{ top: `${st.y}%`, left: `${st.x}%` }}
-                  onMouseEnter={() => setHoveredState(st.id)}
-                  onMouseLeave={() => setHoveredState(null)}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform hover:scale-125 z-20"
+            {/* Top-Right Control Buttons: Layer Control + All India / Corridor View */}
+            <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
+              {/* Interactive Layer Control Widget */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowLayerMenu((prev) => !prev)}
+                  className={`h-6 px-2 rounded-md text-[10px] font-semibold flex items-center gap-1.5 transition border shadow-md ${
+                    showLayerMenu || activeLayerCount > 0
+                      ? 'bg-slate-900/95 text-cyan-300 border-cyan-500/60'
+                      : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                  title="Toggle Map Layers: Traffic, Logistics Hubs, Recycling Facilities"
                 >
-                  {/* Clean circular emblem badge */}
-                  <div
-                    className={`w-9 h-9 rounded-xl border flex flex-col items-center justify-center font-mono font-bold text-[10px] shadow-lg backdrop-blur-md transition ${colorClass}`}
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  <span>Layers</span>
+                  <span className="px-1 py-0.2 rounded-full bg-cyan-950 border border-cyan-800 text-[8px] font-mono text-cyan-300">
+                    {activeLayerCount}/3
+                  </span>
+                </button>
+
+                {/* Layer Control Dropdown Panel */}
+                {showLayerMenu && (
+                  <div className="absolute right-0 top-7 z-30 w-64 p-2.5 rounded-xl bg-slate-950/95 backdrop-blur-md border border-slate-800 shadow-2xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                      <span className="text-[11px] font-bold text-white flex items-center gap-1.5 font-sans">
+                        <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
+                        <span>GIS Layer Controls</span>
+                      </span>
+                      <button
+                        onClick={() => setShowLayerMenu(false)}
+                        className="text-slate-500 hover:text-white transition"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Toggle 1: Traffic Density */}
+                    <div
+                      onClick={() => toggleLayer('traffic')}
+                      className={`p-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
+                        activeLayers.traffic
+                          ? 'bg-rose-950/30 border-rose-500/40 text-slate-200'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Flame className={`w-3.5 h-3.5 ${activeLayers.traffic ? 'text-rose-400' : 'text-slate-500'}`} />
+                        <div>
+                          <div className="text-[11px] font-bold text-white leading-tight">Traffic Density</div>
+                          <div className="text-[9px] text-slate-400">Congestion, bottlenecks & speeds</div>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-7 h-4 rounded-full p-0.5 transition-colors ${
+                          activeLayers.traffic ? 'bg-rose-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-3 h-3 rounded-full bg-white transition-transform ${
+                            activeLayers.traffic ? 'translate-x-3' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Toggle 2: Logistics Hubs */}
+                    <div
+                      onClick={() => toggleLayer('hubs')}
+                      className={`p-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
+                        activeLayers.hubs
+                          ? 'bg-cyan-950/30 border-cyan-500/40 text-slate-200'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className={`w-3.5 h-3.5 ${activeLayers.hubs ? 'text-cyan-400' : 'text-slate-500'}`} />
+                        <div>
+                          <div className="text-[11px] font-bold text-white leading-tight">Logistics Hubs</div>
+                          <div className="text-[9px] text-slate-400">10 Collection depots & docks</div>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-7 h-4 rounded-full p-0.5 transition-colors ${
+                          activeLayers.hubs ? 'bg-cyan-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-3 h-3 rounded-full bg-white transition-transform ${
+                            activeLayers.hubs ? 'translate-x-3' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Toggle 3: Recycling Facility Views */}
+                    <div
+                      onClick={() => toggleLayer('recyclers')}
+                      className={`p-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
+                        activeLayers.recyclers
+                          ? 'bg-emerald-950/30 border-emerald-500/40 text-slate-200'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Factory className={`w-3.5 h-3.5 ${activeLayers.recyclers ? 'text-emerald-400' : 'text-slate-500'}`} />
+                        <div>
+                          <div className="text-[11px] font-bold text-white leading-tight">Recycling Facilities</div>
+                          <div className="text-[9px] text-slate-400">7 CPCB Smelters & Refineries</div>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-7 h-4 rounded-full p-0.5 transition-colors ${
+                          activeLayers.recyclers ? 'bg-emerald-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-3 h-3 rounded-full bg-white transition-transform ${
+                            activeLayers.recyclers ? 'translate-x-3' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Action Footer */}
+                    <div className="pt-1 flex items-center justify-between text-[9px] text-slate-400">
+                      <button
+                        onClick={() => setActiveLayers({ traffic: true, hubs: true, recyclers: true })}
+                        className="hover:text-cyan-300 font-semibold"
+                      >
+                        Enable All
+                      </button>
+                      <button
+                        onClick={() => setActiveLayers({ traffic: false, hubs: false, recyclers: false })}
+                        className="hover:text-rose-400 font-semibold"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* [All India] / [Corridor View] Toggle Button */}
+              <button
+                onClick={toggleAllIndiaCorridor}
+                className={`h-6 px-2.5 rounded-md text-[10px] font-semibold flex items-center gap-1 transition border shadow-md ${
+                  mapMode === 'gis'
+                    ? 'bg-blue-600 text-white border-blue-400'
+                    : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700'
+                }`}
+                title="Toggle between All India Spatial Grid and Corridor Zoom"
+              >
+                <Globe className="w-3 h-3 text-cyan-400" />
+                <span>{mapMode === 'gis' ? 'Corridor View' : 'All India'}</span>
+              </button>
+            </div>
+
+            {/* Quick Layer Control Pills (Floating overlay for instant 1-click toggling) */}
+            <div className="absolute top-10 right-2.5 z-20 hidden md:flex flex-col gap-1 pointer-events-auto">
+              <button
+                onClick={() => toggleLayer('traffic')}
+                className={`h-5 px-1.5 rounded text-[9px] font-mono font-semibold flex items-center gap-1 transition border backdrop-blur-md shadow-sm ${
+                  activeLayers.traffic
+                    ? 'bg-rose-950/80 text-rose-300 border-rose-500/50'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+                title="Toggle Traffic Density"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${activeLayers.traffic ? 'bg-rose-400 animate-pulse' : 'bg-slate-600'}`}></span>
+                <span>Traffic {activeLayers.traffic ? 'ON' : 'OFF'}</span>
+              </button>
+              <button
+                onClick={() => toggleLayer('hubs')}
+                className={`h-5 px-1.5 rounded text-[9px] font-mono font-semibold flex items-center gap-1 transition border backdrop-blur-md shadow-sm ${
+                  activeLayers.hubs
+                    ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/50'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+                title="Toggle Logistics Hubs"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${activeLayers.hubs ? 'bg-cyan-400' : 'bg-slate-600'}`}></span>
+                <span>Hubs {activeLayers.hubs ? 'ON' : 'OFF'}</span>
+              </button>
+              <button
+                onClick={() => toggleLayer('recyclers')}
+                className={`h-5 px-1.5 rounded text-[9px] font-mono font-semibold flex items-center gap-1 transition border backdrop-blur-md shadow-sm ${
+                  activeLayers.recyclers
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+                title="Toggle Recycling Facilities"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${activeLayers.recyclers ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
+                <span>Recyclers {activeLayers.recyclers ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
+
+            {/* Bottom Floating Bar */}
+            {mapMode === 'live' ? (
+              // Live Mode: Playback controls + hints
+              <div className="absolute bottom-2 inset-x-2 z-20 flex flex-wrap items-center justify-between text-xs pointer-events-none gap-2">
+                <div className="flex items-center gap-1 pointer-events-auto bg-slate-950/90 backdrop-blur-md px-2 py-0.5 rounded-lg border border-slate-800 shadow-md">
+                  <button
+                    onClick={() => setIsSimulating(!isSimulating)}
+                    className={`h-5 px-1.5 rounded text-[10px] font-bold flex items-center gap-1 transition ${
+                      isSimulating
+                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-800 text-slate-300 hover:text-white'
+                    }`}
                   >
-                    <span>{st.id}</span>
-                    <span className="text-[8px] font-sans opacity-80">{st.rate.toFixed(0)}%</span>
+                    <span>{isSimulating ? '⏸ Live' : '▶ Paused'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-0.5 ml-0.5 font-mono text-[10px]">
+                    {[1, 2, 4].map((spd) => (
+                      <button
+                        key={spd}
+                        onClick={() => setSimulationSpeed(spd)}
+                        className={`h-5 px-1.5 rounded font-bold transition ${
+                          simulationSpeed === spd
+                            ? 'bg-slate-800 text-emerald-400 border border-emerald-500/40'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {spd}x
+                      </button>
+                    ))}
                   </div>
 
-                  {/* Tooltip on Hover - shows clear concise facts without clutter */}
-                  {isHovered && (
-                    <div className="absolute bottom-11 left-1/2 -translate-x-1/2 w-52 p-3 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl text-left z-50 pointer-events-none animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-1 mb-1.5">
-                        <span className="text-xs font-bold text-white">{st.name}</span>
-                        <span className="text-[10px] text-emerald-400 font-mono font-bold">{st.rate}% Rate</span>
-                      </div>
-                      <div className="space-y-1 text-[11px] text-slate-300">
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Generation:</span>
-                          <span className="font-mono text-white">{st.genK}K Tonnes</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Active Trucks:</span>
-                          <span className="font-mono text-cyan-400">{st.fleet} In Transit</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Landfill Status:</span>
-                          <span className="text-amber-300 text-[10px]">{st.landfillRisk}</span>
-                        </div>
-                      </div>
+                  {/* Consignments in transit indicator (bound to memoized devices) */}
+                  {deviceMetrics.inTransitCount > 0 && (
+                    <div className="hidden sm:flex items-center gap-1 ml-1 pl-1 border-l border-slate-800 text-[9px] font-mono text-cyan-300">
+                      <Package className="w-2.5 h-2.5 text-cyan-400" />
+                      <span>{deviceMetrics.inTransitCount} devices ({deviceMetrics.totalWeightInTransitKg} kg) in transit</span>
                     </div>
                   )}
                 </div>
-              );
-            })}
 
-            {/* Landfill Buffer Danger Markers */}
-            {LANDFILL_CLUSTERS.map((lf) => (
-              <div
-                key={lf.id}
-                onMouseEnter={() => setHoveredLandfill(lf)}
-                onMouseLeave={() => setHoveredLandfill(null)}
-                style={{
-                  top: lf.id === 'LF-DEL-01' ? '28%' : lf.id === 'LF-MUM-02' ? '58%' : lf.id === 'LF-BLR-03' ? '76%' : lf.id === 'LF-HYD-04' ? '66%' : lf.id === 'LF-CHE-05' ? '82%' : '48%',
-                  left: lf.id === 'LF-DEL-01' ? '39%' : lf.id === 'LF-MUM-02' ? '32%' : lf.id === 'LF-BLR-03' ? '38%' : lf.id === 'LF-HYD-04' ? '46%' : lf.id === 'LF-CHE-05' ? '45%' : '23%'
-                }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-10 cursor-pointer"
-              >
-                <div
-                  className={`w-3.5 h-3.5 rounded-full ring-2 animate-ping opacity-75 ${
-                    lf.currentCapacityPct > 90 ? 'ring-rose-500 bg-rose-500' : 'ring-amber-500 bg-amber-500'
-                  }`}
-                />
+                <div className="hidden md:block text-[9px] text-slate-400 bg-slate-950/80 px-2 py-0.5 rounded-full border border-slate-800">
+                  Click a truck, hub, or smelter to inspect • scroll to zoom
+                </div>
+
+                <div className="text-[8px] text-slate-500 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800 font-mono truncate max-w-[170px] sm:max-w-none">
+                  Leaflet | Tiles © CARTO © Esri
+                </div>
               </div>
-            ))}
+            ) : (
+              // GIS Mode: Screenshot 2 Bottom Banner
+              <div className="absolute bottom-2 inset-x-2 z-20 flex items-center justify-between text-xs pointer-events-none gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] text-cyan-300 bg-slate-950/90 backdrop-blur-md px-2.5 py-0.5 rounded-lg border border-slate-800 shadow-md pointer-events-auto">
+                  <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Hover state nodes, hubs, or recyclers to view real-time CPCB capacity metrics</span>
+                </div>
 
-            {/* Live Hover Details Bar at Bottom of Map */}
-            <div className="absolute bottom-3 inset-x-4 bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2 flex items-center justify-between text-xs backdrop-blur-md">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Hover blocks above to see state & landfill cluster metrics</span>
-              </span>
-              <span className="font-mono text-slate-300 text-[11px]">
-                {FLEET_TRUCKS.length} ACTIVE TRUCKS MONITORED
-              </span>
-            </div>
+                <div className="text-[8px] text-slate-500 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800 font-mono">
+                  Leaflet | Tiles © CARTO © Esri
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Side: Predictive Maintenance Module for Logistics Fleet */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">
+        {/* RIGHT COLUMN: FLEET PREDICTIVE MAINTENANCE ENGINE */}
+        <div className="lg:col-span-5 xl:col-span-4 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex flex-col justify-between h-[340px] sm:h-[355px] overflow-hidden">
+          <div className="space-y-2">
+            {/* Header: Wrench icon + Title + [IOT TELEMETRY] Badge */}
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <div className="flex items-center gap-1.5">
+                <Wrench className="w-4 h-4 text-amber-400 shrink-0" />
+                <h3 className="text-xs font-bold text-white font-sans">
                   Fleet Predictive Maintenance Engine
                 </h3>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-800 font-semibold uppercase">
-                IoT Telemetry
+              <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold border border-amber-500/40 text-amber-400 bg-amber-950/20">
+                IOT TELEMETRY
               </span>
             </div>
 
-            {/* Truck Selector */}
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-300">
+            {/* Active Collection Vehicle Dropdown */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
                 Active Collection Vehicle:
               </label>
               <select
-                value={selectedTruck.id}
+                value={selectedTruckId}
                 onChange={(e) => {
-                  const t = FLEET_TRUCKS.find((x) => x.id === e.target.value);
-                  if (t) setSelectedTruck(t);
+                  setSelectedTruckId(e.target.value);
+                  setMapMode('live');
                 }}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-medium text-white focus:outline-none focus:border-blue-500 transition"
               >
-                {FLEET_TRUCKS.map((t) => (
+                {trucks.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.vehicleNumber} ({t.driverName} - {t.state})
                   </option>
@@ -417,89 +1672,87 @@ export const TrackingFleetGISView: React.FC = () => {
               </select>
             </div>
 
-            {/* Truck Card Telemetry */}
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+            {/* Inner Details Card */}
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/90 space-y-2">
+              {/* Vehicle Number & Status Badge */}
               <div className="flex items-start justify-between">
                 <div>
-                  <h4 className="text-sm font-bold text-white font-mono">
+                  <h3 className="text-sm font-bold text-white font-mono tracking-tight">
                     {selectedTruck.vehicleNumber}
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">{selectedTruck.currentRoute}</p>
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[190px] sm:max-w-[230px]">
+                    {selectedTruck.currentRoute}
+                  </p>
                 </div>
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                    selectedTruck.maintenanceAlert
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    selectedTruck.status === 'At Collection Point'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                   }`}
                 >
-                  {selectedTruck.status}
+                  {selectedTruck.status === 'In Transit' ? 'IN TRANSIT' : 'AT COLLECTION POINT'}
                 </span>
               </div>
 
-              {/* Real-time Diagnostics Grid */}
-              <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] font-sans">Engine Hours Run:</span>
-                  <span className="text-white font-bold text-sm">{selectedTruck.engineHours} hrs</span>
+              {/* 2x2 Telemetry Grid */}
+              <div className="grid grid-cols-2 gap-1.5 text-xs font-mono">
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 font-sans block">
+                    Engine Hours Run:
+                  </span>
+                  <span className="text-white font-bold text-xs">{selectedTruck.engineHours} hrs</span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] font-sans">Tire Pressure:</span>
-                  <span
-                    className={`font-bold text-sm ${
-                      selectedTruck.tirePressurePsi < 31 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}
-                  >
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 font-sans block">
+                    Tire Pressure:
+                  </span>
+                  <span className="text-emerald-400 font-bold text-xs">
                     {selectedTruck.tirePressurePsi} PSI
                   </span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] font-sans">Vibration Anomaly Score:</span>
-                  <span
-                    className={`font-bold text-sm ${
-                      selectedTruck.vibrationAnomalyScore > 50 ? 'text-rose-400' : 'text-emerald-400'
-                    }`}
-                  >
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 font-sans block">
+                    Vibration Anomaly Score:
+                  </span>
+                  <span className="text-emerald-400 font-bold text-xs">
                     {selectedTruck.vibrationAnomalyScore}/100
                   </span>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] font-sans">Past Breakdowns:</span>
-                  <span className="text-white font-bold text-sm">
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-[9px] text-slate-400 font-sans block">
+                    Past Breakdowns:
+                  </span>
+                  <span className="text-white font-bold text-xs">
                     {selectedTruck.pastBreakdownCount} Incidents
                   </span>
                 </div>
               </div>
 
-              {/* Maintenance Interval Recommendation */}
-              <div
-                className={`p-3 rounded-xl border text-xs space-y-1 ${
-                  selectedTruck.maintenanceAlert
-                    ? 'bg-rose-950/30 border-rose-600/50 text-rose-300'
-                    : 'bg-emerald-950/30 border-emerald-600/50 text-emerald-300'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 font-bold">
-                  {selectedTruck.maintenanceAlert ? (
-                    <AlertTriangle className="w-4 h-4 text-rose-400" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  )}
+              {/* Green Recommendation Card */}
+              <div className="p-2 rounded-lg bg-emerald-950/20 border border-emerald-600/40 text-emerald-300 text-[10px] space-y-0.5">
+                <div className="flex items-center gap-1 font-bold text-emerald-400 text-[10px]">
+                  <CheckCircle2 className="w-3 h-3 shrink-0" />
                   <span>Predictive Maintenance Recommendation:</span>
                 </div>
-                <p className="text-[11px] leading-relaxed">
+                <p className="text-[10px] leading-relaxed text-slate-300">
                   {selectedTruck.serviceIntervalRecommendation}
                 </p>
               </div>
 
-              {/* Active Route Alert */}
-              {selectedTruck.activeAlert && (
-                <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-600/40 text-amber-300 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] leading-relaxed">{selectedTruck.activeAlert}</p>
+              {/* Warning / Clear Card */}
+              {selectedTruck.activeAlert ? (
+                <div className="p-2 rounded-lg bg-amber-950/20 border border-amber-600/40 text-amber-300 text-[10px] flex items-start gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] leading-tight">{selectedTruck.activeAlert}</p>
+                </div>
+              ) : (
+                <div className="p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span>Corridor clear. Standard travel speed maintaining on schedule.</span>
                 </div>
               )}
             </div>
@@ -507,78 +1760,340 @@ export const TrackingFleetGISView: React.FC = () => {
         </div>
       </div>
 
-      {/* Landfill Saturation & Remediation Buffer Cards */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      {/* ========================================================= */}
+      {/* SECTION 2: LIVE FLEET TRACKING ROSTER TABLE               */}
+      {/* ========================================================= */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 shadow-lg">
+        {/* Table Section Header */}
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
           <div>
-            <h3 className="text-base font-bold text-white">
-              National Municipal Landfill E-Waste Saturation Matrix
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5 font-sans">
+              <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Live Fleet Tracking Roster</span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Automated trigger prevents toxic dumping when landfill capacity breaches statutory thresholds.
+            <p className="text-[10px] text-slate-400">
+              Select any vehicle to load its telemetry, map focus and route history.
             </p>
           </div>
-          <span className="text-xs text-rose-400 font-semibold flex items-center gap-1">
-            <ShieldAlert className="w-4 h-4" />
-            <span>Hazard Alert Mode</span>
-          </span>
+
+          <div className="px-2 py-0.5 rounded bg-blue-950/70 border border-cyan-800/50 text-cyan-400 font-mono text-[10px] font-bold">
+            {filteredTrucks.length} / {trucks.length} VEHICLES
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {LANDFILL_CLUSTERS.map((lf) => {
-            const isCritical = lf.currentCapacityPct >= 90;
-            return (
-              <div
-                key={lf.id}
-                className={`p-4 rounded-xl border space-y-3 transition ${
-                  isCritical
-                    ? 'bg-rose-950/20 border-rose-600/40'
-                    : 'bg-slate-950/80 border-slate-800'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-white">{lf.name}</h4>
-                    <p className="text-[11px] text-slate-400">
-                      {lf.city}, {lf.state}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase font-mono ${
-                      isCritical
-                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+        {/* Search & Filters Row */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-950/70 p-1.5 rounded-lg border border-slate-800">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search vehicle no., truck ID, driver or route..."
+              className="w-full bg-transparent pl-8 pr-2 py-0.5 text-xs text-white placeholder-slate-500 focus:outline-none font-sans"
+            />
+          </div>
+
+          {/* Filter Dropdowns */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <select
+              value={selectedStateFilter}
+              onChange={(e) => setSelectedStateFilter(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 font-sans"
+            >
+              <option value="ALL">All states</option>
+              <option value="Uttar Pradesh">Uttar Pradesh</option>
+              <option value="Karnataka">Karnataka</option>
+              <option value="Maharashtra">Maharashtra</option>
+              <option value="Telangana">Telangana</option>
+              <option value="Tamil Nadu">Tamil Nadu</option>
+            </select>
+
+            <select
+              value={selectedStatusFilter}
+              onChange={(e) => setSelectedStatusFilter(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 font-sans"
+            >
+              <option value="ALL">All statuses</option>
+              <option value="In Transit">In Transit</option>
+              <option value="At Collection Point">At Collection Point</option>
+            </select>
+
+            <select
+              value={selectedTrafficFilter}
+              onChange={(e) => setSelectedTrafficFilter(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500 font-sans"
+            >
+              <option value="ALL">All traffic</option>
+              <option value="Clear">Clear</option>
+              <option value="Moderate">Moderate</option>
+              <option value="Heavy Congestion">Heavy Congestion</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Data Table */}
+        <div className="overflow-x-auto rounded-lg border border-slate-800/80">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-950 text-slate-400 font-mono text-[9px] uppercase border-b border-slate-800">
+              <tr>
+                <th className="py-1.5 px-3 font-semibold">VEHICLE</th>
+                <th className="py-1.5 px-3 font-semibold">DRIVER</th>
+                <th className="py-1.5 px-3 font-semibold">ROUTE / NEXT STOP</th>
+                <th className="py-1.5 px-3 font-semibold">TRIP PROGRESS</th>
+                <th className="py-1.5 px-3 font-semibold">LOAD</th>
+                <th className="py-1.5 px-3 font-semibold">TRAFFIC</th>
+                <th className="py-1.5 px-3 font-semibold text-right">STATUS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/70">
+              {filteredTrucks.map((truck) => {
+                const isSelected = selectedTruckId === truck.id;
+                return (
+                  <tr
+                    key={truck.id}
+                    onClick={() => {
+                      setSelectedTruckId(truck.id);
+                      setMapMode('live');
+                    }}
+                    className={`cursor-pointer transition ${
+                      isSelected
+                        ? 'bg-blue-950/30 border-l-2 border-l-emerald-400'
+                        : 'hover:bg-slate-800/40'
                     }`}
                   >
-                    {lf.currentCapacityPct}% CAP
-                  </span>
-                </div>
+                    {/* Vehicle */}
+                    <td className="py-1.5 px-3 font-mono">
+                      <div className="font-bold text-white text-xs">{truck.vehicleNumber}</div>
+                      <div className="text-[9px] text-slate-500 font-sans">{truck.id}</div>
+                    </td>
 
-                {/* Progress bar */}
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isCritical ? 'bg-rose-500' : 'bg-amber-500'
-                    }`}
-                    style={{ width: `${lf.currentCapacityPct}%` }}
-                  />
-                </div>
+                    {/* Driver */}
+                    <td className="py-1.5 px-3">
+                      <div className="font-medium text-slate-200 text-xs">{truck.driverName}</div>
+                      <div className="text-[9px] text-slate-500 flex items-center gap-1 font-mono">
+                        <Phone className="w-2.5 h-2.5 text-slate-500" />
+                        <span>{truck.driverPhone}</span>
+                      </div>
+                    </td>
 
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300 font-mono">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">E-Waste Diverted:</span>
-                    <span className="text-emerald-400 font-bold">{lf.totalEwasteDivertedTonnes} MT</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Leachate Blocked:</span>
-                    <span className="text-cyan-400 font-bold">{(lf.leachatePreventedLiters / 1000).toFixed(0)}k L</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                    {/* Route / Next Stop */}
+                    <td className="py-1.5 px-3 max-w-xs">
+                      <div className="font-medium text-slate-300 text-xs truncate">{truck.currentRoute}</div>
+                      <div className="text-[9px] text-slate-500 truncate mt-0.5">
+                        {truck.nextStop || 'En route to authorized terminal'}
+                      </div>
+                    </td>
+
+                    {/* Trip Progress */}
+                    <td className="py-1.5 px-3 w-28 font-mono">
+                      <div className="text-[10px] text-cyan-400 font-bold mb-0.5">
+                        {truck.routeProgressPct}%
+                      </div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-cyan-400 rounded-full transition-all duration-300"
+                          style={{ width: `${truck.routeProgressPct}%` }}
+                        />
+                      </div>
+                    </td>
+
+                    {/* Load */}
+                    <td className="py-1.5 px-3 w-36 font-mono">
+                      <div className="flex items-center justify-between text-[9px] mb-0.5">
+                        <span className="text-amber-400 font-bold">{truck.loadPercentage}%</span>
+                        <span className="text-slate-400">
+                          {truck.currentLoadKg}/{truck.capacityKg} kg
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                          style={{ width: `${truck.loadPercentage}%` }}
+                        />
+                      </div>
+                    </td>
+
+                    {/* Traffic */}
+                    <td className="py-1.5 px-3 font-semibold text-xs">
+                      <span
+                        className={
+                          truck.trafficLevel === 'Heavy Congestion'
+                            ? 'text-rose-400'
+                            : truck.trafficLevel === 'Moderate'
+                            ? 'text-amber-400'
+                            : 'text-emerald-400'
+                        }
+                      >
+                        {truck.trafficLevel}
+                      </span>
+                    </td>
+
+                    {/* Status Badge */}
+                    <td className="py-1.5 px-3 text-right">
+                      <span
+                        className={`inline-block text-[8px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          truck.status === 'At Collection Point'
+                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50'
+                            : 'bg-cyan-950/80 text-cyan-300 border border-cyan-800/50'
+                        }`}
+                      >
+                        {truck.status === 'In Transit' ? 'IN TRANSIT' : 'AT COLLECTION POINT'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* SECTION 3: TRUCK ROUTE HISTORY                            */}
+      {/* ========================================================= */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 shadow-lg">
+        {/* Header & Selected Truck Meta */}
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+          <div>
+            <h3 className="text-xs font-bold text-white">Truck Route History</h3>
+            <p className="text-[10px] text-slate-400">
+              {selectedTruck.vehicleNumber} • {selectedTruck.driverName} — live trip progress and logged trip records.
+            </p>
+          </div>
+
+          <div className="font-mono text-xs text-slate-400 font-bold">{selectedTruck.id}</div>
+        </div>
+
+        {/* Sub-tabs: ACTIVE TRIP STOPS vs PAST TRIPS */}
+        <div className="flex items-center gap-5 border-b border-slate-800/60 pb-1">
+          <button
+            onClick={() => setRouteHistoryTab('active')}
+            className={`flex items-center gap-1.5 text-xs font-semibold transition ${
+              routeHistoryTab === 'active' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Route className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="uppercase tracking-wider text-[10px]">ACTIVE TRIP STOPS</span>
+            <span className="ml-1 text-[10px] font-mono text-cyan-400 font-bold">
+              {selectedTruck.routeProgressPct}% complete
+            </span>
+          </button>
+
+          <button
+            onClick={() => setRouteHistoryTab('past')}
+            className={`flex items-center gap-1.5 text-xs font-semibold transition ${
+              routeHistoryTab === 'past' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+            <span className="uppercase tracking-wider text-[10px]">
+              PAST TRIPS ({selectedTruck.tripHistory?.length || 3})
+            </span>
+          </button>
+        </div>
+
+        {/* Tab Content: Active Trip Stops */}
+        {routeHistoryTab === 'active' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-0.5">
+            {(selectedTruck.stops || []).map((stop, idx) => {
+              const isCompleted = stop.status === 'Completed';
+              const isCurrent = stop.status === 'Current';
+              return (
+                <div
+                  key={idx}
+                  className={`p-2 rounded-lg border flex items-start gap-2.5 text-xs transition ${
+                    isCurrent
+                      ? 'bg-blue-950/20 border-cyan-500/50 shadow-sm'
+                      : isCompleted
+                      ? 'bg-slate-950/60 border-slate-800'
+                      : 'bg-slate-950/30 border-slate-800/50 opacity-70'
+                  }`}
+                >
+                  {/* Indicator Dot */}
+                  <div className="mt-0.5 shrink-0">
+                    {isCompleted ? (
+                      <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 flex items-center justify-center">
+                        <Check className="w-2.5 h-2.5 text-slate-950 stroke-[3]" />
+                      </div>
+                    ) : isCurrent ? (
+                      <div className="relative flex items-center justify-center">
+                        <span className="animate-ping absolute inline-flex h-3.5 w-3.5 rounded-full bg-cyan-400 opacity-75"></span>
+                        <div className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                      </div>
+                    ) : (
+                      <div className="w-2.5 h-2.5 rounded-full border border-slate-600 bg-slate-800" />
+                    )}
+                  </div>
+
+                  {/* Stop Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`truncate text-xs ${
+                          isCurrent
+                            ? 'text-cyan-300 font-bold'
+                            : isCompleted
+                            ? 'text-white font-semibold'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {stop.stopName}
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-500 shrink-0 ml-1">
+                        {stop.arrivalTime}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      {stop.notes || (isCompleted ? 'Passed • scan logged' : 'Scheduled corridor stop')}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Tab Content: Past Trips */}
+        {routeHistoryTab === 'past' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-0.5 font-mono text-xs">
+            {selectedTruck.tripHistory && selectedTruck.tripHistory.length > 0 ? (
+              selectedTruck.tripHistory.map((trip, idx) => (
+                <div
+                  key={trip.tripId}
+                  className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between text-[11px]"
+                >
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-white">{trip.tripId}</span>
+                      <span
+                        className={`text-[8px] px-1.5 py-0.2 rounded uppercase font-bold ${
+                          idx === 0
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}
+                      >
+                        {idx === 0 ? 'DELAYED' : 'COMPLETED'}
+                      </span>
+                    </div>
+                    <div className="text-slate-400 font-sans text-[10px] truncate">
+                      {trip.origin} → {trip.destination}
+                    </div>
+                  </div>
+
+                  <div className="text-right text-[10px] text-slate-300 shrink-0 ml-2">
+                    <div>{trip.totalDistanceKm} km • {Math.round(trip.transitHours * 60)} min</div>
+                    <div className="text-cyan-400 font-bold">{trip.totalEwasteKg} kg</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-3 text-slate-400 text-xs text-center col-span-3">No past trips recorded</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-};
+});

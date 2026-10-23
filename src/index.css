@@ -1,4 +1,19 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Leaflet dark theme tweaks */
+.leaflet-container {
+  background-color: #0b1320 !important;
+  font-family: inherit;
+  outline: none;
+}
+.leaflet-tile {
+  filter: brightness(0.9) contrast(1.1);
+}
+.custom-truck-marker {
+  background: transparent !important;
+  border: none !important;
+}
 
 @theme {
   --font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;

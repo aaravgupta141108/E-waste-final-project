@@ -18,23 +18,38 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Key
+  Key,
+  UserPlus,
+  UserCheck,
+  BadgeCheck,
+  Info
 } from 'lucide-react';
 import { ThreeCanvas } from '../components/ThreeCanvas';
 import { DEMO_USERS } from '../data/mockData';
-import { Role } from '../types';
+import { Role, UserProfile } from '../types';
 
 interface LoginViewProps {
-  onLogin: (role: Role) => void;
+  onLogin: (role: Role, customUser?: UserProfile, asNewUser?: boolean) => void;
   onExplorePublicPortal: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPortal }) => {
-  const [activeTab, setActiveTab] = useState<'persona' | 'credentials'>('persona');
+  const [activeTab, setActiveTab] = useState<'officer' | 'citizen' | 'persona'>('officer');
+
+  // Officer Login State
+  const [officerId, setOfficerId] = useState('ENG-COL-104');
+  const [officerPassword, setOfficerPassword] = useState('maitri');
+  const [officerError, setOfficerError] = useState<string | null>(null);
+
+  // New Citizen State (0 Registered Devices)
+  const [newCitizenName, setNewCitizenName] = useState('Aarav Gupta');
+  const [newCitizenMobile, setNewCitizenMobile] = useState('+91 98234 56789');
+  const [newCitizenCity, setNewCitizenCity] = useState('New Delhi');
+
+  // Existing Citizen OTP State
   const [phoneOrEmail, setPhoneOrEmail] = useState('ananya.sharma@gmail.com');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<Role>('citizen');
 
   // Web Authentication API & Biometric States
   const [biometricModalOpen, setBiometricModalOpen] = useState(false);
@@ -42,17 +57,139 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
   const [biometricPhase, setBiometricPhase] = useState<'idle' | 'challenging' | 'scanning' | 'verified' | 'error'>('idle');
   const [attestationHash, setAttestationHash] = useState('');
   const [authenticatorName, setAuthenticatorName] = useState('FIDO2 Level 3 Secure Enclave / TPM 2.0');
-  const [webAuthnSupported, setWebAuthnSupported] = useState(true);
+
+  // Official Statutory Officers with special IDs
+  const STATUTORY_OFFICERS = [
+    {
+      id: 'ENG-COL-104',
+      role: 'collection_engineer' as Role,
+      title: 'Collection Engineer',
+      officerName: 'Rajesh Verma',
+      dept: 'National E-Waste Collection Hub #04',
+      user: DEMO_USERS.collection_engineer,
+      icon: HardHat,
+      color: 'amber'
+    },
+    {
+      id: 'ENG-FAC-302',
+      role: 'factory_engineer' as Role,
+      title: 'Factory Engineer',
+      officerName: 'Dr. Suresh Nair',
+      dept: 'EcoRecycle Apex Demanufacturing Plant',
+      user: DEMO_USERS.factory_engineer,
+      icon: Factory,
+      color: 'cyan'
+    },
+    {
+      id: 'AUD-CPCB-77',
+      role: 'auditor' as Role,
+      title: 'CPCB / SPCB Auditor',
+      officerName: 'Priya Iyer',
+      dept: 'Central Pollution Control Board (CPCB)',
+      user: DEMO_USERS.auditor,
+      icon: Building2,
+      color: 'purple'
+    },
+    {
+      id: 'ADM-NATIONAL-01',
+      role: 'admin' as Role,
+      title: 'Master Admin',
+      officerName: 'Vikramaditya Sen',
+      dept: 'Ministry of Environment, Forest & Climate Change (MoEFCC)',
+      user: DEMO_USERS.admin,
+      icon: ShieldAlert,
+      color: 'rose'
+    }
+  ];
 
   // High-privilege roles requiring biometric verification
   const highPrivilegeRoles: Role[] = ['auditor', 'admin'];
 
-  const triggerBiometricAuth = async (role: Role) => {
+  // Handle Official Statutory Officer Login
+  const handleOfficerLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setOfficerError(null);
+
+    const cleanId = officerId.trim().toUpperCase();
+    const cleanPass = officerPassword.trim().toLowerCase();
+
+    // Password must be 'maitri'
+    if (cleanPass !== 'maitri') {
+      setOfficerError('Invalid statutory password. The access password for all official personnel is "maitri".');
+      return;
+    }
+
+    // Match Special IDs
+    let matchedOfficer = STATUTORY_OFFICERS.find(
+      (o) => o.id === cleanId || o.role.toUpperCase() === cleanId
+    );
+
+    // Fallback aliases for convenience
+    if (!matchedOfficer) {
+      if (cleanId.includes('COLLECTION') || cleanId.includes('COL') || cleanId.includes('RAJESH')) {
+        matchedOfficer = STATUTORY_OFFICERS[0];
+      } else if (cleanId.includes('FACTORY') || cleanId.includes('FAC') || cleanId.includes('SURESH')) {
+        matchedOfficer = STATUTORY_OFFICERS[1];
+      } else if (cleanId.includes('AUDITOR') || cleanId.includes('CPCB') || cleanId.includes('PRIYA')) {
+        matchedOfficer = STATUTORY_OFFICERS[2];
+      } else if (cleanId.includes('ADMIN') || cleanId.includes('MOEF') || cleanId.includes('VIKRAM')) {
+        matchedOfficer = STATUTORY_OFFICERS[3];
+      }
+    }
+
+    if (!matchedOfficer) {
+      setOfficerError(
+        'Unrecognized Official ID. Valid IDs: ENG-COL-104 (Collection), ENG-FAC-302 (Factory), AUD-CPCB-77 (Auditor), ADM-NATIONAL-01 (Master Admin).'
+      );
+      return;
+    }
+
+    // High privilege check
+    if (highPrivilegeRoles.includes(matchedOfficer.role)) {
+      triggerBiometricAuth(matchedOfficer.role, matchedOfficer.user);
+    } else {
+      onLogin(matchedOfficer.role, matchedOfficer.user, false);
+    }
+  };
+
+  // Quick select an officer & auto-fill ID and password 'maitri'
+  const handleQuickSelectOfficer = (officer: typeof STATUTORY_OFFICERS[0]) => {
+    setOfficerId(officer.id);
+    setOfficerPassword('maitri');
+    setOfficerError(null);
+  };
+
+  // Handle New Citizen Login (0 registered devices)
+  const handleNewCitizenLogin = () => {
+    const newUser: UserProfile = {
+      id: `USR-NEW-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: newCitizenName.trim() || 'New Citizen Consignor',
+      email: `${newCitizenName.toLowerCase().replace(/\s+/g, '.') || 'citizen'}@ewaste.gov.in`,
+      mobile: newCitizenMobile.trim() || '+91 98000 00000',
+      role: 'citizen',
+      organization: 'Individual Citizen Network',
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+      state: 'Delhi NCR',
+      city: newCitizenCity || 'New Delhi',
+      pincode: '110001',
+      upiId: `${newCitizenName.toLowerCase().replace(/\s+/g, '') || 'citizen'}@upi`
+    };
+
+    // Log in as new user with 0 registered devices
+    onLogin('citizen', newUser, true);
+  };
+
+  // Handle Demo Citizen Login (existing records)
+  const handleDemoCitizenLogin = () => {
+    onLogin('citizen', DEMO_USERS.citizen, false);
+  };
+
+  // WebAuthn Passkey Simulation
+  const triggerBiometricAuth = async (role: Role, userProfile?: UserProfile) => {
     setBiometricTargetRole(role);
     setBiometricModalOpen(true);
     setBiometricPhase('challenging');
 
-    // Generate cryptographic 32-byte challenge
     const challenge = new Uint8Array(32);
     if (typeof window !== 'undefined' && window.crypto) {
       window.crypto.getRandomValues(challenge);
@@ -60,9 +197,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
     const hex = Array.from(challenge).slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
     setAttestationHash(`0x${hex}...sha256`);
 
-    // Detect platform authenticator or hardware passkey
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-      setWebAuthnSupported(true);
       try {
         if (window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
           const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
@@ -76,110 +211,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
         setAuthenticatorName('FIDO2 Hardware Token / Cryptographic Passkey');
       }
     } else {
-      setWebAuthnSupported(false);
       setAuthenticatorName('FIDO2 Emulated Cryptographic Enclave');
     }
 
-    setTimeout(async () => {
+    setTimeout(() => {
       setBiometricPhase('scanning');
-
-      // Attempt standard browser WebAuthn API call
-      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-        try {
-          // navigator.credentials.get with WebAuthn options
-          const credentialOptions: CredentialRequestOptions = {
-            publicKey: {
-              challenge,
-              timeout: 45000,
-              rpId: window.location.hostname || 'localhost',
-              userVerification: 'preferred',
-            }
-          };
-          // Try invoking the native WebAuthn dialog
-          await navigator.credentials.get(credentialOptions);
-        } catch (e: any) {
-          // Browser iframe or policy might block direct hardware access in sandbox;
-          // the UI animation handles smooth visual verification seamlessly
-          console.debug('WebAuthn API assertion handled:', e?.message || e);
-        }
-      }
-
-      // Transition to verified state after biometric scan completes
       setTimeout(() => {
         setBiometricPhase('verified');
         setTimeout(() => {
           setBiometricModalOpen(false);
-          onLogin(role);
-        }, 1100);
-      }, 1800);
+          onLogin(role, userProfile || DEMO_USERS[role], false);
+        }, 900);
+      }, 1500);
     }, 600);
-  };
-
-  const handlePersonaClick = (role: Role) => {
-    if (highPrivilegeRoles.includes(role)) {
-      triggerBiometricAuth(role);
-    } else {
-      onLogin(role);
-    }
-  };
-
-  const personas = [
-    {
-      role: 'citizen' as Role,
-      title: 'Citizen / Consignor',
-      user: DEMO_USERS.citizen,
-      badge: 'Public Consignor',
-      desc: 'Register personal or corporate devices, track NIST data wipe, acknowledge payout, and download green certificate.',
-      icon: Leaf,
-      accent: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/40 text-emerald-400 hover:border-emerald-400'
-    },
-    {
-      role: 'collection_engineer' as Role,
-      title: 'Collection Hub Engineer',
-      user: DEMO_USERS.collection_engineer,
-      badge: 'Field Operations',
-      desc: 'Intake triage, AI computer-vision sorting, Sanchar Saathi IMEI check, NIST-800-88 data scrubbing, live geotag dispatch.',
-      icon: HardHat,
-      accent: 'from-amber-500/20 to-orange-500/10 border-amber-500/40 text-amber-400 hover:border-amber-400'
-    },
-    {
-      role: 'factory_engineer' as Role,
-      title: 'Factory Demanufacturing Lead',
-      user: DEMO_USERS.factory_engineer,
-      badge: 'Plant Refinery',
-      desc: 'Demanufacturing line, weight mismatch checks, operator intervention logs, material extraction yields & green certification.',
-      icon: Factory,
-      accent: 'from-cyan-500/20 to-blue-500/10 border-cyan-500/40 text-cyan-400 hover:border-cyan-400'
-    },
-    {
-      role: 'auditor' as Role,
-      title: 'CPCB / SPCB Auditor',
-      user: DEMO_USERS.auditor,
-      badge: 'Statutory Regulator',
-      desc: 'Form-3 statutory audits, chain of custody inspection, recycler licenses verification, and tamper-proof audit trails.',
-      icon: Building2,
-      accent: 'from-purple-500/20 to-indigo-500/10 border-purple-500/40 text-purple-400 hover:border-purple-400'
-    },
-    {
-      role: 'admin' as Role,
-      title: 'Master Admin / MoEFCC',
-      user: DEMO_USERS.admin,
-      badge: 'Apex Controller',
-      desc: 'Full national oversight, rate table adjustments, weight discrepancy resolution, GIS fleet command, national targets.',
-      icon: ShieldAlert,
-      accent: 'from-rose-500/20 to-red-500/10 border-rose-500/40 text-rose-400 hover:border-rose-400'
-    }
-  ];
-
-  const handleSendOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    setOtpSent(true);
-    setOtp('582910'); // pre-fill demo OTP
-  };
-
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    onLogin(selectedRole);
   };
 
   return (
@@ -188,8 +232,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Bar */}
-      <header className="relative z-10 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 sm:px-8 py-4 flex items-center justify-between">
+      {/* Top Header */}
+      <header className="relative z-10 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
@@ -206,7 +250,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              CPCB / MoEFCC Circular Governance & Certified Data Destruction Portal
+              National Statutory Tracking, NIST Data Erasure, and EPR Governance
             </p>
           </div>
         </div>
@@ -221,10 +265,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
         {/* Left Side: 3D Model & National Metrics */}
-        <div className="lg:col-span-6 flex flex-col justify-center space-y-6">
-          <div className="space-y-3">
+        <div className="lg:col-span-6 flex flex-col justify-center space-y-5">
+          <div className="space-y-2.5">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
               <span>National Circular Economy Infrastructure</span>
@@ -235,7 +279,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                 Recycle & Certify.
               </span>
             </h1>
-            <p className="text-sm sm:text-base text-slate-400 max-w-xl leading-relaxed">
+            <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
               India&apos;s unified digital chain of custody for electronic waste. Powered by NIST SP 800-88 cryptographic sanitization, AI Computer Vision intake sorting, and CPCB EPR statutory traceability.
             </p>
           </div>
@@ -256,7 +300,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
           </div>
 
           {/* Official National Figures */}
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-3 gap-3">
             <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="text-[11px] text-slate-400 font-medium">FY 25-26 Generated</div>
               <div className="text-lg font-bold text-white mt-0.5">14.15 L MT</div>
@@ -276,221 +320,414 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
         </div>
 
         {/* Right Side: Role Selector & Login Console */}
-        <div className="lg:col-span-6 bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl space-y-5">
+          {/* Main Navigation Tabs */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
             <div>
-              <h2 className="text-lg font-bold text-white">Select Access Level</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Instant 1-Click Persona Login for testing and statutory evaluation
+              <h2 className="text-base font-bold text-white">Access Portal</h2>
+              <p className="text-xs text-slate-400">
+                Official officers require Special ID and password <strong className="text-emerald-400">maitri</strong>
               </p>
             </div>
-            <div className="flex rounded-lg bg-slate-950 p-1 border border-slate-800">
+            <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
               <button
-                onClick={() => setActiveTab('persona')}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                  activeTab === 'persona'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                onClick={() => { setActiveTab('officer'); setOfficerError(null); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeTab === 'officer'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                1-Click Personas
+                <Key className="w-3.5 h-3.5" />
+                <span>Statutory Officers</span>
               </button>
               <button
-                onClick={() => setActiveTab('credentials')}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                  activeTab === 'credentials'
+                onClick={() => { setActiveTab('citizen'); setOfficerError(null); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeTab === 'citizen'
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                OTP Login
+                <Leaf className="w-3.5 h-3.5" />
+                <span>Citizen / Consignor</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab('persona'); setOfficerError(null); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeTab === 'persona'
+                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>1-Click Switch</span>
               </button>
             </div>
           </div>
 
-          {activeTab === 'persona' ? (
-            <div className="space-y-3">
-              {personas.map((item) => {
-                const Icon = item.icon;
-                const isHighPrivilege = highPrivilegeRoles.includes(item.role);
-                return (
-                  <button
-                    key={item.role}
-                    onClick={() => handlePersonaClick(item.role)}
-                    className={`w-full text-left p-3.5 rounded-2xl bg-gradient-to-r ${item.accent} border transition-all flex items-center justify-between group hover:scale-[1.01]`}
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 shrink-0">
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-bold text-white group-hover:text-emerald-300 transition">
-                            {item.title}
-                          </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-950/80 text-slate-300 border border-slate-700/60">
-                            {item.user.name}
-                          </span>
-                          {isHighPrivilege && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-950/90 text-purple-300 border border-purple-500/50">
-                              <Fingerprint className="w-3 h-3 text-purple-400" />
-                              <span>WebAuthn Passkey</span>
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
-                          {item.desc}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      {isHighPrivilege && (
-                        <div className="hidden sm:flex items-center gap-1 text-[11px] text-purple-300/80 font-mono">
-                          <Lock className="w-3 h-3 text-purple-400" />
-                          <span>Biometrics</span>
-                        </div>
-                      )}
-                      <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-white group-hover:translate-x-1 transition" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
+          {/* TAB 1: STATUTORY OFFICERS (SPECIAL IDS & PASSWORD 'maitri') */}
+          {activeTab === 'officer' && (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Select Role to Authenticate
-                </label>
+              {/* Quick Official Credentials Chips */}
+              <div>
+                <div className="flex items-center justify-between text-xs text-slate-300 font-semibold mb-2">
+                  <span>Select Statutory Officer ID to Auto-Fill:</span>
+                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
+                    Password: maitri
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {personas.map((p) => {
-                    const isHighPriv = highPrivilegeRoles.includes(p.role);
+                  {STATUTORY_OFFICERS.map((officer) => {
+                    const Icon = officer.icon;
+                    const isSelected = officerId === officer.id;
                     return (
                       <button
-                        key={p.role}
+                        key={officer.id}
                         type="button"
-                        onClick={() => setSelectedRole(p.role)}
-                        className={`p-2.5 rounded-xl text-left text-xs border transition ${
-                          selectedRole === p.role
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                        onClick={() => handleQuickSelectOfficer(officer)}
+                        className={`p-2.5 rounded-xl text-left border transition flex items-center gap-2.5 ${
+                          isSelected
+                            ? 'bg-amber-500/15 border-amber-500/60 text-amber-300'
+                            : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-white">{p.title}</span>
-                          {isHighPriv && <Fingerprint className="w-3.5 h-3.5 text-purple-400" />}
+                        <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 shrink-0">
+                          <Icon className="w-4 h-4 text-amber-400" />
                         </div>
-                        <div className="text-[10px] text-slate-400">{p.badge}</div>
+                        <div className="overflow-hidden">
+                          <div className="text-xs font-bold text-white truncate">{officer.title}</div>
+                          <div className="text-[10px] font-mono text-amber-400/90 truncate">{officer.id}</div>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Biometric Passkey Quick Sign-In Option */}
-              <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                    <Fingerprint className="w-4 h-4" />
+              {/* Officer Login Form */}
+              <form onSubmit={handleOfficerLogin} className="space-y-3.5 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Special Official ID *
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={officerId}
+                      onChange={(e) => {
+                        setOfficerId(e.target.value);
+                        setOfficerError(null);
+                      }}
+                      placeholder="e.g. ENG-COL-104, ENG-FAC-302, AUD-CPCB-77, ADM-NATIONAL-01"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white font-mono uppercase tracking-wide focus:outline-none focus:border-amber-500"
+                      required
+                    />
                   </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>FIDO2 / WebAuthn Biometric Passkey</span>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-900 text-purple-200">W3C</span>
+                  <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5">
+                    <span>Valid IDs:</span>
+                    <span className="font-mono text-slate-400">ENG-COL-104</span> •
+                    <span className="font-mono text-slate-400">ENG-FAC-302</span> •
+                    <span className="font-mono text-slate-400">AUD-CPCB-77</span> •
+                    <span className="font-mono text-slate-400">ADM-NATIONAL-01</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-300">
+                      Statutory Password *
+                    </label>
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      (Password is <strong>maitri</strong>)
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="password"
+                      value={officerPassword}
+                      onChange={(e) => {
+                        setOfficerPassword(e.target.value);
+                        setOfficerError(null);
+                      }}
+                      placeholder="Enter password (maitri)"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Error Banner */}
+                {officerError && (
+                  <div className="p-3 rounded-xl bg-rose-950/50 border border-rose-500/50 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-[11px] leading-relaxed">{officerError}</div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 font-bold text-xs text-white transition shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Verify Credentials & Enter Official Console</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+
+              <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
+                <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  High-privilege roles (CPCB Auditor & Master Admin) will also trigger biometric passkey verification in accordance with statutory guidelines.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CITIZEN / CONSIGNOR (NEW USER VS DEMO) */}
+          {activeTab === 'citizen' && (
+            <div className="space-y-4">
+              {/* Card 1: New Citizen with 0 registered devices */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-teal-950/20 border border-emerald-500/40 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      <UserPlus className="w-5 h-5" />
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      Touch ID, Face ID, Windows Hello or Hardware Security Key
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span>New Citizen Consignor</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-mono font-bold">
+                          0 Devices
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Start with clean slate of 0 registered devices
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="block text-[11px] text-slate-300 mb-1">Your Full Name</label>
+                    <input
+                      type="text"
+                      value={newCitizenName}
+                      onChange={(e) => setNewCitizenName(e.target.value)}
+                      placeholder="e.g. Aarav Gupta"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-300 mb-1">Mobile Number</label>
+                    <input
+                      type="text"
+                      value={newCitizenMobile}
+                      onChange={(e) => setNewCitizenMobile(e.target.value)}
+                      placeholder="+91 98234 56789"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                  💡 Upon logging in, you will see <strong>0 registered devices</strong>. Once you register your first electronic asset, it will immediately display in your roster along with its live 10-step circular lifecycle stage!
+                </p>
+
                 <button
                   type="button"
-                  onClick={() => triggerBiometricAuth(selectedRole)}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-1 shadow-md shadow-purple-600/20"
+                  onClick={handleNewCitizenLogin}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2"
                 >
-                  <ScanFace className="w-3.5 h-3.5" />
-                  <span>Authenticate</span>
+                  <UserPlus className="w-4 h-4" />
+                  <span>Sign In as New User (0 Devices)</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-slate-800" />
-                <span className="flex-shrink mx-3 text-[10px] text-slate-500 uppercase tracking-widest">
-                  Or sign in via OTP
-                </span>
-                <div className="flex-grow border-t border-slate-800" />
-              </div>
-
-              {!otpSent ? (
-                <form onSubmit={handleSendOtp} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Registered Mobile Number or Email
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        value={phoneOrEmail}
-                        onChange={(e) => setPhoneOrEmail(e.target.value)}
-                        placeholder="+91 98112 43210 or user@email.com"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                      />
+              {/* Card 2: Demo Citizen (Ananya Sharma) */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-slate-900 text-slate-300 border border-slate-800">
+                      <UserCheck className="w-4 h-4 text-teal-400" />
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      DLT-registered Indian SMS gateway for instant OTP delivery
-                    </p>
+                    <div>
+                      <div className="text-xs font-bold text-white">Existing Citizen Demo (Ananya Sharma)</div>
+                      <div className="text-[10px] text-slate-400">Pre-loaded with 3 sample devices in various stages</div>
+                    </div>
                   </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 font-mono">
+                    3 Devices
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
                   <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-xs text-white transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+                    type="button"
+                    onClick={handleDemoCitizenLogin}
+                    className="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition flex items-center justify-center gap-1.5"
                   >
-                    <span>Request One-Time Password</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <BadgeCheck className="w-4 h-4 text-teal-400" />
+                    <span>Quick Sign In as Ananya Sharma</span>
                   </button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Enter 6-Digit OTP (Demo: 582910)
-                    </label>
-                    <div className="relative">
-                      <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(true);
+                      setOtp('582910');
+                    }}
+                    className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-400 hover:text-white transition"
+                  >
+                    Use OTP
+                  </button>
+                </div>
+
+                {otpSent && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleDemoCitizenLogin();
+                    }}
+                    className="pt-2 border-t border-slate-800 space-y-2"
+                  >
+                    <div className="text-[11px] text-slate-300 flex items-center justify-between">
+                      <span>Enter Demo OTP (Pre-filled):</span>
+                      <span className="font-mono text-emerald-400">582910</span>
+                    </div>
+                    <div className="flex gap-2">
                       <input
                         type="text"
                         value={otp}
                         onChange={(e) => setOtp(e.target.value)}
-                        maxLength={6}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white font-mono tracking-widest focus:outline-none focus:border-emerald-500"
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono tracking-widest focus:outline-none focus:border-emerald-500"
                       />
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition"
+                      >
+                        Verify OTP
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-xs text-white transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
-                  >
-                    <span>Verify & Enter Console</span>
-                    <ShieldCheck className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOtpSent(false)}
-                    className="w-full text-center text-[11px] text-slate-400 hover:text-white"
-                  >
-                    Change mobile number
-                  </button>
-                </form>
-              )}
+                  </form>
+                )}
+              </div>
             </div>
           )}
 
+          {/* TAB 3: 1-CLICK ALL PERSONAS SWITCH */}
+          {activeTab === 'persona' && (
+            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+              {/* Option 1: New Citizen (0 Devices) */}
+              <button
+                onClick={handleNewCitizenLogin}
+                className="w-full text-left p-3 rounded-2xl bg-gradient-to-r from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 hover:border-emerald-400 transition-all flex items-center justify-between group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 shrink-0 text-emerald-400">
+                    <UserPlus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white group-hover:text-emerald-300">
+                        New Citizen Consignor
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700">
+                        0 Devices (Clean Slate)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Starts with 0 registered devices. Add a device to view live 10-step tracking.
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-white group-hover:translate-x-0.5 transition" />
+              </button>
+
+              {/* Option 2: Demo Citizen (3 Devices) */}
+              <button
+                onClick={handleDemoCitizenLogin}
+                className="w-full text-left p-3 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 shrink-0 text-teal-400">
+                    <Leaf className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white group-hover:text-teal-300">
+                        Citizen / Consignor (Demo)
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-900 text-slate-300 border border-slate-800">
+                        Ananya Sharma • 3 Devices
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      View pre-loaded device lifecycle, NIST wipe certs, and UPI payout acknowledgment.
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-white group-hover:translate-x-0.5 transition" />
+              </button>
+
+              {/* Option 3-6: Official Statutory Officers */}
+              {STATUTORY_OFFICERS.map((item) => {
+                const Icon = item.icon;
+                const isHighPrivilege = highPrivilegeRoles.includes(item.role);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (isHighPrivilege) {
+                        triggerBiometricAuth(item.role, item.user);
+                      } else {
+                        onLogin(item.role, item.user, false);
+                      }
+                    }}
+                    className="w-full text-left p-3 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-amber-500/50 transition-all flex items-center justify-between group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 shrink-0 text-amber-400">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white group-hover:text-amber-300">
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60">
+                            ID: {item.id}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-emerald-400 border border-slate-800">
+                            Pass: maitri
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {item.officerName} • {item.dept}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-500 group-hover:text-white transition">
+                      {isHighPrivilege && <Fingerprint className="w-3.5 h-3.5 text-purple-400" />}
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Security & Statutory Compliance Footnote */}
           <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
             <span className="flex items-center gap-1">
               <Lock className="w-3 h-3 text-emerald-400" />
-              <span>DPDP Act 2023 & CERT-In Compliant</span>
+              <span>DPDP Act 2023 & CPCB EPR Statutory Verified</span>
             </span>
-            <span>Server: Asia-South1 (Mumbai)</span>
+            <span className="font-mono text-[10px]">Server: Asia-South1 (Mumbai)</span>
           </div>
         </div>
       </main>
@@ -499,7 +736,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
       {biometricModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-3xl bg-slate-900 border border-purple-500/40 p-6 sm:p-8 shadow-2xl shadow-purple-950/50 space-y-6 overflow-hidden">
-            {/* Glowing top ambient line */}
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-indigo-400 to-cyan-400" />
 
             {/* Header */}
@@ -512,7 +748,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     <span>WebAuthn Biometric Guard</span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800">
-                      High Privilege
+                      Official Access
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
@@ -530,9 +766,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
 
             {/* Visual Biometric Scanner Area */}
             <div className="relative flex flex-col items-center justify-center py-6 px-4 rounded-2xl bg-slate-950 border border-slate-800/80 overflow-hidden">
-              {/* Radial scanner waves */}
               <div className="relative w-28 h-28 flex items-center justify-center">
-                {/* Outer pulsing ring */}
                 <div
                   className={`absolute inset-0 rounded-full border-2 transition-all duration-700 ${
                     biometricPhase === 'verified'
@@ -542,8 +776,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                       : 'border-slate-700'
                   }`}
                 />
-
-                {/* Second ring */}
                 <div
                   className={`absolute inset-3 rounded-full border border-dashed transition-all duration-500 ${
                     biometricPhase === 'verified'
@@ -554,8 +786,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                   }`}
                   style={{ animationDuration: '6s' }}
                 />
-
-                {/* Fingerprint / Scan icon container */}
                 <div
                   className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-500 relative ${
                     biometricPhase === 'verified'
@@ -570,8 +800,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                   ) : (
                     <Fingerprint className="w-10 h-10" />
                   )}
-
-                  {/* Horizontal laser scan beam */}
                   {biometricPhase === 'scanning' && (
                     <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse shadow-lg shadow-cyan-400" />
                   )}
@@ -621,8 +849,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                 <span className="text-emerald-400 font-bold uppercase">{biometricTargetRole}</span>
               </div>
               <div className="flex items-center justify-between text-slate-400">
-                <span>Compliance Level:</span>
-                <span className="text-slate-300">DPDP Act 2023 • FIDO2 Level 3</span>
+                <span>Statutory Passcode:</span>
+                <span className="text-emerald-300 font-bold">maitri (Validated)</span>
               </div>
             </div>
 
@@ -634,8 +862,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                   setBiometricPhase('verified');
                   setTimeout(() => {
                     setBiometricModalOpen(false);
-                    onLogin(biometricTargetRole);
-                  }, 600);
+                    onLogin(biometricTargetRole, DEMO_USERS[biometricTargetRole], false);
+                  }, 500);
                 }}
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs transition shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2"
               >
@@ -647,7 +875,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onExplorePublicPo
                 type="button"
                 onClick={() => {
                   setBiometricModalOpen(false);
-                  onLogin(biometricTargetRole);
+                  onLogin(biometricTargetRole, DEMO_USERS[biometricTargetRole], false);
                 }}
                 className="w-full text-center py-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition"
               >

@@ -149,6 +149,29 @@ export interface RecyclerPartner {
   contactEmail: string;
 }
 
+export interface RouteStop {
+  stopName: string;
+  arrivalTime: string;
+  departureTime?: string;
+  status: 'Completed' | 'Current' | 'Pending';
+  weightLoggedKg?: number;
+  eWayBillNumber?: string;
+  notes?: string;
+}
+
+export interface RouteTripHistory {
+  tripId: string;
+  date: string;
+  origin: string;
+  destination: string;
+  totalDistanceKm: number;
+  transitHours: number;
+  totalEwasteKg: number;
+  co2SavedKg: number;
+  status: 'Completed' | 'In Progress';
+  stops: RouteStop[];
+}
+
 export interface FleetTruck {
   id: string;
   vehicleNumber: string;
@@ -158,6 +181,16 @@ export interface FleetTruck {
   currentLocationName: string;
   state: string;
   coordinates: [number, number]; // [lat, lng]
+  mapCoordinates?: { x: number; y: number }; // [x%, y%] on India spatial grid
+  speedKmph?: number;
+  headingDeg?: number;
+  routeProgressPct?: number;
+  nextStop?: string;
+  eWayBillNumber?: string;
+  gpsWaypoints?: [number, number][]; // [lat, lng]
+  waypoints?: { x: number; y: number; name: string }[];
+  stops?: RouteStop[];
+  tripHistory?: RouteTripHistory[];
   loadPercentage: number;
   capacityKg: number;
   currentLoadKg: number;

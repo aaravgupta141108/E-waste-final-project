@@ -493,9 +493,65 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     driverName: 'Harpreet Singh',
     driverPhone: '+91 98101 23456',
     currentRoute: 'Delhi NCR Hub 04 -> Greater Noida Recycler Plant',
+    nextStop: 'Next: Pari Chowk • Uttar Pradesh',
     currentLocationName: 'Noida-Greater Noida Expressway (Km 14)',
     state: 'Uttar Pradesh',
     coordinates: [28.5355, 77.3910],
+    gpsWaypoints: [
+      [28.6315, 77.2167], // New Delhi Connaught Place
+      [28.6139, 77.2450], // Pragati Maidan
+      [28.6080, 77.2950], // Mayur Vihar
+      [28.5800, 77.3200], // Film City Noida
+      [28.5355, 77.3910], // Noida Expressway (current)
+      [28.4900, 77.4400], // Sector 132
+      [28.4715, 77.5100], // Pari Chowk
+      [28.5080, 77.4680]  // Ecotech 3 Recycler Plant
+    ],
+    mapCoordinates: { x: 39, y: 32 },
+    speedKmph: 46,
+    headingDeg: 120,
+    routeProgressPct: 56,
+    eWayBillNumber: 'EWB-2026-90412849',
+    waypoints: [
+      { x: 36, y: 30, name: 'Connaught Place Hub 04' },
+      { x: 37.5, y: 31, name: 'Mayur Vihar Checkpoint' },
+      { x: 39, y: 32, name: 'Noida Expressway Toll (Km 14)' },
+      { x: 42, y: 33.5, name: 'Pari Chowk Interchange' },
+      { x: 44, y: 34, name: 'EcoRecycle Apex Plant Greater Noida' }
+    ],
+    stops: [
+      { stopName: 'Hub #04 Central Delhi', arrivalTime: '08:30 IST', departureTime: '09:15 IST', status: 'Completed', weightLoggedKg: 3080, eWayBillNumber: 'EWB-2026-90412849', notes: 'Passed • scan logged' },
+      { stopName: 'Mayur Vihar Weighbridge', arrivalTime: '10:05 IST', departureTime: '10:20 IST', status: 'Completed', weightLoggedKg: 3078, notes: 'Passed • verified' },
+      { stopName: 'Noida Expressway (Km 14)', arrivalTime: '10:55 IST', status: 'Current', notes: 'In Transit • 46 km/h' },
+      { stopName: 'Pari Chowk Checkpost', arrivalTime: '11:30 IST (Est.)', status: 'Pending', notes: 'CPCB Transit Permit inspection' },
+      { stopName: 'EcoRecycle Plant Unloading Bay 3', arrivalTime: '12:15 IST (Est.)', status: 'Pending', notes: 'Demanufacturing intake reception' }
+    ],
+    tripHistory: [
+      {
+        tripId: 'TRP-01-102',
+        date: '2026-10-21',
+        origin: 'Gurugram CyberCity',
+        destination: 'Greater Noida Plant',
+        totalDistanceKm: 78,
+        transitHours: 2.8,
+        totalEwasteKg: 2950,
+        co2SavedKg: 142.5,
+        status: 'Completed',
+        stops: []
+      },
+      {
+        tripId: 'TRP-01-101',
+        date: '2026-10-19',
+        origin: 'Okhla Industrial Area',
+        destination: 'Greater Noida Plant',
+        totalDistanceKm: 54,
+        transitHours: 2.1,
+        totalEwasteKg: 3200,
+        co2SavedKg: 165.0,
+        status: 'Completed',
+        stops: []
+      }
+    ],
     loadPercentage: 88,
     capacityKg: 3500,
     currentLoadKg: 3080,
@@ -515,9 +571,73 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     driverName: 'Basavaraj M.',
     driverPhone: '+91 94480 34567',
     currentRoute: 'Electronic City -> Peenya Recovery Hub',
+    nextStop: 'Next: NICE Ring Road • Karnataka',
     currentLocationName: 'NICE Ring Road, Bengaluru',
     state: 'Karnataka',
     coordinates: [12.9141, 77.5385],
+    gpsWaypoints: [
+      [12.8452, 77.6602], // Electronic City Phase 1
+      [12.8870, 77.5920], // Bannerghatta Road Junction
+      [12.9141, 77.5385], // NICE Road Cloverleaf (current)
+      [12.9550, 77.5100], // Mysore Road Toll
+      [12.9750, 77.4980], // Magadi Road Toll
+      [13.0310, 77.5260]  // Peenya Recovery Hub
+    ],
+    mapCoordinates: { x: 37, y: 73 },
+    speedKmph: 52,
+    headingDeg: 330,
+    routeProgressPct: 48,
+    eWayBillNumber: 'EWB-2026-78192033',
+    waypoints: [
+      { x: 38, y: 76, name: 'Electronic City Phase 1' },
+      { x: 37.5, y: 74.5, name: 'Bannerghatta Junction' },
+      { x: 37, y: 73, name: 'NICE Road Cloverleaf' },
+      { x: 36, y: 72, name: 'Magadi Road Toll' },
+      { x: 35.5, y: 71, name: 'Peenya EcoHub Gate 2' }
+    ],
+    stops: [
+      { stopName: 'Electronic City Collection Hub', arrivalTime: '08:45 IST', departureTime: '09:20 IST', status: 'Completed', weightLoggedKg: 2632, eWayBillNumber: 'EWB-2026-78192033', notes: 'Passed • scan logged' },
+      { stopName: 'NICE Ring Road Toll (Km 22)', arrivalTime: '09:50 IST', status: 'Current', notes: 'In Transit • 52 km/h' },
+      { stopName: 'Peenya Recovery Hub Gate 2', arrivalTime: '11:15 IST (Est.)', status: 'Pending', notes: 'Estimated 11:15 IST' }
+    ],
+    tripHistory: [
+      {
+        tripId: 'TRP-02-204',
+        date: '2026-10-21',
+        origin: 'Whitefield IT Export Park',
+        destination: 'Peenya Recovery Hub',
+        totalDistanceKm: 31,
+        transitHours: 1.7,
+        totalEwasteKg: 2610,
+        co2SavedKg: 138.0,
+        status: 'Completed',
+        stops: []
+      },
+      {
+        tripId: 'TRP-02-203',
+        date: '2026-10-19',
+        origin: 'Koramangala IT Corridor',
+        destination: 'Peenya Recovery Hub',
+        totalDistanceKm: 42,
+        transitHours: 1.25,
+        totalEwasteKg: 2750,
+        co2SavedKg: 145.0,
+        status: 'Completed',
+        stops: []
+      },
+      {
+        tripId: 'TRP-02-202',
+        date: '2026-10-17',
+        origin: 'Manyata Embassy Park',
+        destination: 'Peenya Recovery Hub',
+        totalDistanceKm: 58,
+        transitHours: 1.86,
+        totalEwasteKg: 2800,
+        co2SavedKg: 140.0,
+        status: 'Completed',
+        stops: []
+      }
+    ],
     loadPercentage: 94,
     capacityKg: 2800,
     currentLoadKg: 2632,
@@ -537,9 +657,52 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     driverName: 'Sanjay Patil',
     driverPhone: '+91 98221 77889',
     currentRoute: 'Hinjawadi IT Park -> Taloja MIDC Refinery',
+    nextStop: 'Next: Lonavala Ghats • Maharashtra',
     currentLocationName: 'Mumbai-Pune Expressway (Lonavala Ghats)',
     state: 'Maharashtra',
     coordinates: [18.7547, 73.4062],
+    gpsWaypoints: [
+      [18.5913, 73.7389],
+      [18.6650, 73.6800],
+      [18.7180, 73.6120],
+      [18.7547, 73.4062],
+      [18.8350, 73.2840],
+      [19.0300, 73.1000],
+      [19.0750, 73.1200]
+    ],
+    mapCoordinates: { x: 33, y: 56 },
+    speedKmph: 58,
+    headingDeg: 300,
+    routeProgressPct: 44,
+    eWayBillNumber: 'EWB-2026-33918244',
+    waypoints: [
+      { x: 35, y: 58, name: 'Hinjawadi Phase 3 Hub' },
+      { x: 34, y: 57, name: 'Urse Toll Plaza' },
+      { x: 33, y: 56, name: 'Lonavala Ghat Viaduct' },
+      { x: 32, y: 55, name: 'Khalapur Food Mall Checkpoint' },
+      { x: 31, y: 54, name: 'Taloja MIDC Smelting Complex' }
+    ],
+    stops: [
+      { stopName: 'Hinjawadi Phase 3 Hub', arrivalTime: '06:30 IST', departureTime: '07:15 IST', status: 'Completed', weightLoggedKg: 2480, eWayBillNumber: 'EWB-2026-33918244', notes: 'Passed • scan logged' },
+      { stopName: 'Urse Toll Station', arrivalTime: '08:00 IST', departureTime: '08:10 IST', status: 'Completed', weightLoggedKg: 2480, notes: 'Passed • verified' },
+      { stopName: 'Lonavala Ghats (Km 48)', arrivalTime: '08:50 IST', status: 'Current', notes: 'In Transit • 58 km/h' },
+      { stopName: 'Khalapur Toll Plaza', arrivalTime: '09:30 IST (Est.)', status: 'Pending', notes: 'Route checkpoint' },
+      { stopName: 'Taloja MIDC Recycler Unit 4', arrivalTime: '10:15 IST (Est.)', status: 'Pending', notes: 'Estimated 10:15 IST' }
+    ],
+    tripHistory: [
+      {
+        tripId: 'TRP-03-301',
+        date: '2026-10-20',
+        origin: 'Bandra-Kurla Complex (BKC)',
+        destination: 'Taloja MIDC Refinery',
+        totalDistanceKm: 58,
+        transitHours: 2.4,
+        totalEwasteKg: 3100,
+        co2SavedKg: 155.0,
+        status: 'Completed',
+        stops: []
+      }
+    ],
     loadPercentage: 62,
     capacityKg: 4000,
     currentLoadKg: 2480,
@@ -558,9 +721,49 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     driverName: 'Venkatesh Rao',
     driverPhone: '+91 97000 81928',
     currentRoute: 'HITEC City Tech Corridor -> Patancheru Eco Zone',
+    nextStop: 'Next: Outer Ring Road (Exit 3) • Telangana',
     currentLocationName: 'Outer Ring Road (Exit 3), Hyderabad',
     state: 'Telangana',
     coordinates: [17.5022, 78.2680],
+    gpsWaypoints: [
+      [17.4435, 78.3772],
+      [17.4401, 78.3489],
+      [17.4800, 78.3000],
+      [17.5022, 78.2680],
+      [17.4968, 78.3546],
+      [17.5320, 78.2430]
+    ],
+    mapCoordinates: { x: 44, y: 63 },
+    speedKmph: 0,
+    headingDeg: 280,
+    routeProgressPct: 66,
+    eWayBillNumber: 'EWB-2026-55910291',
+    waypoints: [
+      { x: 46, y: 64, name: 'Cyber Gateway HITEC' },
+      { x: 45, y: 63.5, name: 'Gachibowli Stadium Hub' },
+      { x: 44, y: 63, name: 'ORR Exit 3 Depot' },
+      { x: 43, y: 62.5, name: 'Miyapur Checkpost' },
+      { x: 42, y: 62, name: 'Patancheru Eco Industrial SEZ' }
+    ],
+    stops: [
+      { stopName: 'HITEC City Consignor Bay', arrivalTime: '08:45 IST', departureTime: '09:30 IST', status: 'Completed', weightLoggedKg: 3136, eWayBillNumber: 'EWB-2026-55910291', notes: 'Passed • scan logged' },
+      { stopName: 'ORR Exit 3 Collection Point', arrivalTime: '10:10 IST', status: 'Current', notes: 'At Collection Point • Loading' },
+      { stopName: 'Patancheru Eco Zone', arrivalTime: '11:50 IST (Est.)', status: 'Pending', notes: 'Estimated 11:50 IST' }
+    ],
+    tripHistory: [
+      {
+        tripId: 'TRP-04-401',
+        date: '2026-10-21',
+        origin: 'Secunderabad Defense Estate',
+        destination: 'Patancheru Eco Zone',
+        totalDistanceKm: 48,
+        transitHours: 1.9,
+        totalEwasteKg: 2890,
+        co2SavedKg: 140.0,
+        status: 'Completed',
+        stops: []
+      }
+    ],
     loadPercentage: 98,
     capacityKg: 3200,
     currentLoadKg: 3136,
@@ -579,9 +782,49 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     driverName: 'M. Selvakumar',
     driverPhone: '+91 94441 29182',
     currentRoute: 'OMR Chennai -> Sriperumbudur SEZ Recycler',
+    nextStop: 'Next: Porur Junction • Tamil Nadu',
     currentLocationName: 'Guindy Industrial Estate, Chennai',
     state: 'Tamil Nadu',
     coordinates: [13.0067, 80.2025],
+    gpsWaypoints: [
+      [12.8250, 80.2210],
+      [12.9200, 80.2300],
+      [12.9800, 80.2200],
+      [13.0067, 80.2025],
+      [13.0380, 80.1580],
+      [13.0480, 80.0920],
+      [12.9860, 79.9480]
+    ],
+    mapCoordinates: { x: 44, y: 83 },
+    speedKmph: 38,
+    headingDeg: 260,
+    routeProgressPct: 28,
+    eWayBillNumber: 'EWB-2026-11827402',
+    waypoints: [
+      { x: 45, y: 84, name: 'Siruseri IT Park OMR' },
+      { x: 44, y: 83, name: 'Guindy Industrial Junction' },
+      { x: 43, y: 82.5, name: 'Poonamallee High Road' },
+      { x: 41, y: 82, name: 'Sriperumbudur Eco Depot' }
+    ],
+    stops: [
+      { stopName: 'Siruseri IT Park Intake', arrivalTime: '09:00 IST', departureTime: '09:45 IST', status: 'Completed', weightLoggedKg: 2280, eWayBillNumber: 'EWB-2026-11827402', notes: 'Passed • scan logged' },
+      { stopName: 'Guindy Industrial Estate', arrivalTime: '10:40 IST', status: 'Current', notes: 'In Transit • 38 km/h' },
+      { stopName: 'Sriperumbudur SEZ Recycler', arrivalTime: '12:10 IST (Est.)', status: 'Pending', notes: 'Estimated 12:10 IST' }
+    ],
+    tripHistory: [
+      {
+        tripId: 'TRP-05-501',
+        date: '2026-10-21',
+        origin: 'Taramani Ascendas IT Park',
+        destination: 'Sriperumbudur SEZ',
+        totalDistanceKm: 52,
+        transitHours: 2.3,
+        totalEwasteKg: 2600,
+        co2SavedKg: 130.0,
+        status: 'Completed',
+        stops: []
+      }
+    ],
     loadPercentage: 76,
     capacityKg: 3000,
     currentLoadKg: 2280,
@@ -595,6 +838,7 @@ export const FLEET_TRUCKS: FleetTruck[] = [
     trafficLevel: 'Moderate'
   }
 ];
+
 
 export const LANDFILL_CLUSTERS: LandfillCluster[] = [
   {

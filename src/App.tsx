@@ -16,7 +16,7 @@ import { TrackingFleetGISView } from './views/TrackingFleetGISView';
 import { LeaderboardView } from './views/LeaderboardView';
 import { PushNotificationToast } from './components/PushNotificationToast';
 import { DEMO_USERS, MOCK_DEVICES, SYSTEM_ALERTS, INITIAL_COMPLIANCE_REMINDERS } from './data/mockData';
-import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert } from './types';
+import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert, UserProfile } from './types';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(true);
@@ -61,17 +61,48 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  const currentUser = DEMO_USERS[currentRole];
+  // User and Auth State
+  const [currentUser, setCurrentUser] = useState<UserProfile>(DEMO_USERS.citizen);
+  const [isNewUser, setIsNewUser] = useState<boolean>(false);
 
   // Role Switcher
   const handleRoleChange = (newRole: Role) => {
     setCurrentRole(newRole);
+    setCurrentUser(DEMO_USERS[newRole]);
+    setIsNewUser(false);
     setActiveTab('dashboard');
   };
 
-  // Login handler
-  const handleLogin = (role: Role) => {
+  // Switch to clean New Citizen with 0 devices
+  const handleSwitchToNewCitizen = (customName?: string) => {
+    const newUser: UserProfile = {
+      id: `USR-NEW-${Date.now().toString().slice(-4)}`,
+      name: customName || 'New Citizen Consignor',
+      email: 'citizen.new@ewaste.gov.in',
+      mobile: '+91 98000 12345',
+      role: 'citizen',
+      organization: 'Individual Citizen Network',
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+      state: 'Delhi NCR',
+      city: 'New Delhi',
+      pincode: '110001',
+      upiId: ''
+    };
+    setCurrentRole('citizen');
+    setCurrentUser(newUser);
+    setIsNewUser(true);
+    setActiveTab('dashboard');
+  };
+
+  // Login handler with support for custom new user profile
+  const handleLogin = (role: Role, customUser?: UserProfile, asNewUser: boolean = false) => {
     setCurrentRole(role);
+    if (customUser) {
+      setCurrentUser(customUser);
+    } else {
+      setCurrentUser(DEMO_USERS[role]);
+    }
+    setIsNewUser(asNewUser);
     setIsLoggedIn(true);
     setActiveTab('dashboard');
   };
@@ -143,6 +174,69 @@ export default function App() {
     handleUpdateDeviceStatus(deviceId, 'PAYMENT_ACKNOWLEDGED', {
       payoutAcknowledgedAt: new Date().toLocaleString()
     });
+  };
+
+  // 10-Stage Statutory Lifecycle advancement
+  const LIFECYCLE_SEQUENCE: DeviceItem['status'][] = [
+    'REGISTERED',
+    'DETAILS_CONFIRMED',
+    'WIPING',
+    'WIPE_VERIFIED',
+    'PAYMENT_SENT',
+    'PAYMENT_ACKNOWLEDGED',
+    'READY_FOR_DISPATCH',
+    'FACTORY_INSPECTION',
+    'RECYCLED',
+    'CERTIFIED'
+  ];
+
+  const handleAdvanceDeviceStage = (deviceId: string) => {
+    setDevices((prev) =>
+      prev.map((d) => {
+        if (d.id === deviceId) {
+          const currentIdx = LIFECYCLE_SEQUENCE.indexOf(d.status);
+          if (currentIdx !== -1 && currentIdx < LIFECYCLE_SEQUENCE.length - 1) {
+            const nextStatus = LIFECYCLE_SEQUENCE[currentIdx + 1];
+            const extra: Partial<DeviceItem> = {
+              updatedAt: new Date().toLocaleString()
+            };
+            if (nextStatus === 'WIPING' || nextStatus === 'WIPE_VERIFIED') {
+              extra.wipeRecord = {
+                id: `WIPE-${d.id.slice(-4)}`,
+                deviceId: d.id,
+                method: 'Cryptographic Purge & Multi-Pass Overwrite',
+                standard: 'NIST SP 800-88 Rev. 2',
+                toolName: 'BharatScrub Secure Enterprise',
+                toolVersion: 'v4.2.1-IND',
+                startTime: new Date(Date.now() - 1800000).toLocaleString(),
+                endTime: new Date().toLocaleString(),
+                status: 'Pass',
+                verificationHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                recoverySampleTest: 'Passed (0 sectors recoverable)',
+                energyKwh: 0.045,
+                engineerName: 'Rajesh Verma (ENG-COL-104)',
+                videoProofUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
+                notes: 'NIST SP 800-88 cryptographic key zeroization complete.'
+              };
+            }
+            if (nextStatus === 'PAYMENT_SENT') {
+              extra.payoutTxnRef = `UPI/${Math.floor(100000000000 + Math.random() * 900000000000)}/HDFC`;
+              extra.payoutSentAt = new Date().toLocaleString();
+            }
+            if (nextStatus === 'CERTIFIED') {
+              extra.certificateId = `CPCB-CERT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+              extra.certificateHash = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
+            }
+            return {
+              ...d,
+              status: nextStatus,
+              ...extra
+            };
+          }
+        }
+        return d;
+      })
+    );
   };
 
   const handleAddOperatorIntervention = (deviceId: string, intervention: OperatorIntervention) => {
@@ -281,10 +375,12 @@ export default function App() {
     );
   }
 
-  // Filter devices visible to Citizen
+  // Filter devices visible to Citizen (New user starts with 0 devices)
   const visibleDevices =
     currentRole === 'citizen'
-      ? devices.filter((d) => d.userId === currentUser.id)
+      ? isNewUser
+        ? devices.filter((d) => d.userId === currentUser.id)
+        : devices.filter((d) => d.userId === currentUser.id || d.userId === 'USR-IND-8821')
       : devices;
 
   const unreadAlertCount = alerts.filter((a) => !a.resolved).length;
@@ -295,6 +391,7 @@ export default function App() {
       <Navbar
         currentRole={currentRole}
         onRoleChange={handleRoleChange}
+        onSwitchToNewCitizen={handleSwitchToNewCitizen}
         currentUser={currentUser}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -310,7 +407,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className={`flex-1 w-full ${activeTab === 'fleet' ? 'max-w-[1720px] mx-auto px-2 sm:px-4 py-2' : 'max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'}`}>
         {/* Tab Router */}
         {activeTab === 'dashboard' && (
           <>
@@ -325,6 +422,7 @@ export default function App() {
                 }}
                 onAcknowledgePayment={handleAcknowledgePayment}
                 onOpenQrModal={() => setIsQrModalOpen(true)}
+                onAdvanceDeviceStage={handleAdvanceDeviceStage}
               />
             )}
 
@@ -368,7 +466,14 @@ export default function App() {
           </>
         )}
 
-        {activeTab === 'fleet' && <TrackingFleetGISView />}
+        {activeTab === 'fleet' && (
+          <TrackingFleetGISView
+            devices={devices}
+            onSelectDevice={(dId) => {
+              setActiveTab('dashboard');
+            }}
+          />
+        )}
 
         {activeTab === 'carbon' && (
           <CarbonImpactView currentUser={currentUser} devices={devices} />
