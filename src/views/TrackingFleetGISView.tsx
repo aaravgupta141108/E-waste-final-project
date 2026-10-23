@@ -36,11 +36,23 @@ import {
   Factory,
   Flame,
   SlidersHorizontal,
-  Package
+  Package,
+  Sparkles,
+  TrendingUp,
+  Printer
 } from 'lucide-react';
 import L from 'leaflet';
 import { FLEET_TRUCKS } from '../data/mockData';
 import { DeviceItem, FleetTruck } from '../types';
+import { FleetRegulatoryReportModal } from '../components/FleetRegulatoryReportModal';
+
+// Fix Leaflet default icon paths in bundler environments to prevent 404s
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 export interface TrackingFleetGISViewProps {
   devices?: DeviceItem[];
@@ -596,6 +608,123 @@ const TRAFFIC_CORRIDORS: TrafficCorridor[] = [
   }
 ];
 
+// Predictive E-Waste Demand Dataset (Next 7 Days Hotspots based on historical telemetry)
+export interface PredictiveDemandHotspot {
+  dayIndex: number;
+  dayLabel: string;
+  dateStr: string;
+  projectedTonnes: number;
+  surgePct: number;
+  hotspotDistrict: string;
+  state: string;
+  dominantCategory: string;
+  urgency: 'Critical Surge' | 'High Demand' | 'Steady Flow';
+  recommendedDispatch: string;
+  assignedTruckId: string;
+  riskFactor: 'High Battery Risk' | 'RoHS Heavy Metal' | 'Normal';
+}
+
+export const PREDICTIVE_DEMAND_DATA: PredictiveDemandHotspot[] = [
+  {
+    dayIndex: 1,
+    dayLabel: 'Tomorrow (D+1)',
+    dateStr: '24 Oct 2026',
+    projectedTonnes: 14.8,
+    surgePct: 38,
+    hotspotDistrict: 'Okhla Industrial Area Phase-III & Nehru Place',
+    state: 'Delhi NCR',
+    dominantCategory: 'Enterprise IT Servers & Telecom Boards',
+    urgency: 'Critical Surge',
+    recommendedDispatch: 'Deploy TRK-IND-01 (10 MT capacity) & reserve Dock Bay 2',
+    assignedTruckId: 'TRK-IND-01',
+    riskFactor: 'RoHS Heavy Metal'
+  },
+  {
+    dayIndex: 2,
+    dayLabel: 'Day 2 (D+2)',
+    dateStr: '25 Oct 2026',
+    projectedTonnes: 18.2,
+    surgePct: 44,
+    hotspotDistrict: 'Whitefield EPIP Zone & Electronic City Phase-I',
+    state: 'Karnataka',
+    dominantCategory: 'Lithium Battery Packs & Corporate Laptops',
+    urgency: 'Critical Surge',
+    recommendedDispatch: 'Dispatch TRK-IND-02 with Class 9 fire-retardant safety cages',
+    assignedTruckId: 'TRK-IND-02',
+    riskFactor: 'High Battery Risk'
+  },
+  {
+    dayIndex: 3,
+    dayLabel: 'Day 3 (D+3)',
+    dateStr: '26 Oct 2026',
+    projectedTonnes: 16.5,
+    surgePct: 22,
+    hotspotDistrict: 'Andheri SEEPZ & Navi Mumbai MIDC',
+    state: 'Maharashtra',
+    dominantCategory: 'Network Switches & Flat Panel Displays',
+    urgency: 'High Demand',
+    recommendedDispatch: 'Route TRK-IND-03 via Eastern Freeway green freight lane',
+    assignedTruckId: 'TRK-IND-03',
+    riskFactor: 'Normal'
+  },
+  {
+    dayIndex: 4,
+    dayLabel: 'Day 4 (D+4)',
+    dateStr: '27 Oct 2026',
+    projectedTonnes: 12.4,
+    surgePct: 29,
+    hotspotDistrict: 'Hitec City, Madhapur & Patancheru Industrial Belt',
+    state: 'Telangana',
+    dominantCategory: 'Semiconductor R&D Scrap & Multi-layer Motherboards',
+    urgency: 'High Demand',
+    recommendedDispatch: 'Pre-allocate TRK-IND-04 via Outer Ring Road express lane',
+    assignedTruckId: 'TRK-IND-04',
+    riskFactor: 'RoHS Heavy Metal'
+  },
+  {
+    dayIndex: 5,
+    dayLabel: 'Day 5 (D+5)',
+    dateStr: '28 Oct 2026',
+    projectedTonnes: 11.1,
+    surgePct: 15,
+    hotspotDistrict: 'Peenya Industrial Cluster & Yeshwanthpur Yards',
+    state: 'Karnataka',
+    dominantCategory: 'Industrial Inverters & High-Capacity UPS Units',
+    urgency: 'Steady Flow',
+    recommendedDispatch: 'Standard consolidation transit to Peenya Recovery Hub',
+    assignedTruckId: 'TRK-IND-02',
+    riskFactor: 'High Battery Risk'
+  },
+  {
+    dayIndex: 6,
+    dayLabel: 'Day 6 (D+6)',
+    dateStr: '29 Oct 2026',
+    projectedTonnes: 13.9,
+    surgePct: 26,
+    hotspotDistrict: 'Sriperumbudur Electronics SEZ & Oragadam',
+    state: 'Tamil Nadu',
+    dominantCategory: 'Smartphone Assembly Scrapped Modules & Camera ICs',
+    urgency: 'High Demand',
+    recommendedDispatch: 'Schedule TRK-IND-05 for evening CPCB dock intake',
+    assignedTruckId: 'TRK-IND-05',
+    riskFactor: 'Normal'
+  },
+  {
+    dayIndex: 7,
+    dayLabel: 'Day 7 (D+7)',
+    dateStr: '30 Oct 2026',
+    projectedTonnes: 9.6,
+    surgePct: 8,
+    hotspotDistrict: 'Sanand Industrial Cluster & Ahmedabad Electronics Park',
+    state: 'Gujarat',
+    dominantCategory: 'Automotive Electronics & Solar Inverters',
+    urgency: 'Steady Flow',
+    recommendedDispatch: 'Batch transport to certified Gujarat refinery',
+    assignedTruckId: 'TRK-IND-01',
+    riskFactor: 'Normal'
+  }
+];
+
 // Helper to determine color category matching Screenshot 2
 const getStatusTheme = (pct: number) => {
   if (pct > 80) {
@@ -666,6 +795,13 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
   // Route history tab
   const [routeHistoryTab, setRouteHistoryTab] = useState<'active' | 'past'>('active');
+
+  // Regulatory PDF Report Modal State
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+
+  // Predictive Demand State (Next 7 Days Hotspots)
+  const [selectedForecastDay, setSelectedForecastDay] = useState<number>(1);
+  const [allocationToast, setAllocationToast] = useState<string | null>(null);
 
   // Leaflet Map Refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -792,7 +928,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       iconAnchor: [14, 14]
     });
 
-    const marker = L.marker(hub.coords, { icon });
+    const marker = L.marker(hub.coords, { icon, zIndexOffset: 300 });
     const popupHtml = `
       <div style="font-family: Satoshi, sans-serif; min-width: 220px; color: #f8fafc; padding: 4px;">
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px;">
@@ -842,7 +978,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       iconAnchor: [14, 14]
     });
 
-    const marker = L.marker(facility.coords, { icon });
+    const marker = L.marker(facility.coords, { icon, zIndexOffset: 400 });
     const popupHtml = `
       <div style="font-family: Satoshi, sans-serif; min-width: 230px; color: #f8fafc; padding: 4px;">
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px;">
@@ -879,13 +1015,28 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       attributionControl: false
     });
 
-    const tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`;
+    // Authenticated CARTO Voyager Raster Tiles with provided API key cb1_4sqy_1_15a3fad41d4a776cdaf03ad0
+    const tileUrl = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoApiKey}`;
     const tileLayer = L.tileLayer(tileUrl, {
       maxZoom: 19,
-      subdomains: 'abcd',
-      attribution: 'Leaflet | Tiles © CARTO © Esri'
+      attribution: 'Leaflet | Tiles © CARTO (Voyager) © OpenStreetMap'
     }).addTo(map);
     tileLayerRef.current = tileLayer;
+
+    tileLayer.on('tileerror', () => {
+      // Fallback in case of network restrictions
+      tileLayer.setUrl('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+    });
+
+    // Invalidate size shortly after mount to ensure crisp rendering
+    const sizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
+    const handleResize = () => {
+      map.invalidateSize();
+    };
+    window.addEventListener('resize', handleResize);
 
     // Create Dedicated LayerGroups attached to map
     const polylineLayer = L.layerGroup().addTo(map);
@@ -989,7 +1140,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         iconAnchor: [16, 16]
       });
 
-      const marker = L.marker(st.coords, { icon });
+      const marker = L.marker(st.coords, { icon, zIndexOffset: 1200 });
       const popupContent = `
         <div style="font-family: Satoshi, sans-serif; min-width: 180px; color: #f8fafc; padding: 4px;">
           <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 3px; margin-bottom: 4px;">
@@ -1023,10 +1174,12 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
     mapInstanceRef.current = map;
 
     return () => {
+      clearTimeout(sizeTimer);
+      window.removeEventListener('resize', handleResize);
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [cartoApiKey, createHubMarker, createRecyclerMarker]);
+  }, [createHubMarker, createRecyclerMarker]);
 
   // 2. High-Performance Layer Visibility Toggles (Zero marker recreation)
   useEffect(() => {
@@ -1103,7 +1256,8 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       }
     } else {
       // Live Map Mode: Focus on selected truck's route corridor
-      const currentCoords = selectedTruck.coordinates;
+      const activeTruck = trucks.find((t) => t.id === selectedTruckId) || trucks[0];
+      const currentCoords = activeTruck.coordinates;
       map.flyTo(currentCoords, 11, { duration: 0.7 });
 
       // Hide state nodes, show trucks
@@ -1135,10 +1289,10 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         }
       });
 
-      // Render Route Polylines for selected truck
-      if (selectedTruck.gpsWaypoints && selectedTruck.gpsWaypoints.length > 1) {
+      // Render Route Polylines for active truck
+      if (activeTruck.gpsWaypoints && activeTruck.gpsWaypoints.length > 1) {
         // Glow line
-        const glowLine = L.polyline(selectedTruck.gpsWaypoints, {
+        const glowLine = L.polyline(activeTruck.gpsWaypoints, {
           color: '#10b981',
           weight: 6,
           opacity: 0.35
@@ -1146,7 +1300,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(glowLine);
 
         // Core line
-        const routeLine = L.polyline(selectedTruck.gpsWaypoints, {
+        const routeLine = L.polyline(activeTruck.gpsWaypoints, {
           color: '#10b981',
           weight: 3.5,
           opacity: 0.95
@@ -1154,7 +1308,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(routeLine);
 
         // Origin
-        const originMarker = L.circleMarker(selectedTruck.gpsWaypoints[0], {
+        const originMarker = L.circleMarker(activeTruck.gpsWaypoints[0], {
           radius: 4.5,
           color: '#10b981',
           fillColor: '#047857',
@@ -1164,7 +1318,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(originMarker);
 
         // Waypoints
-        selectedTruck.gpsWaypoints.slice(1, -1).forEach((pt) => {
+        activeTruck.gpsWaypoints.slice(1, -1).forEach((pt) => {
           const wpMarker = L.circleMarker(pt, {
             radius: 3,
             color: '#38bdf8',
@@ -1177,7 +1331,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
         // Destination
         const destMarker = L.circleMarker(
-          selectedTruck.gpsWaypoints[selectedTruck.gpsWaypoints.length - 1],
+          activeTruck.gpsWaypoints[activeTruck.gpsWaypoints.length - 1],
           {
             radius: 5.5,
             color: '#38bdf8',
@@ -1190,7 +1344,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       }
 
       // Ghazipur Hazard Zone Buffer
-      if (selectedTruck.id === 'TRK-IND-01') {
+      if (activeTruck.id === 'TRK-IND-01') {
         const hazardCircle = L.circle([28.6284, 77.3292], {
           radius: 3500,
           color: '#f43f5e',
@@ -1202,7 +1356,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         hazardCircleRef.current = hazardCircle;
       }
     }
-  }, [mapMode, selectedTruckId, createTruckIcon, selectedTruck]);
+  }, [mapMode, selectedTruckId, createTruckIcon]);
 
   // 4. Lightweight GPS Coordinate Updater (Updates markers in-place without re-rendering layers)
   useEffect(() => {
@@ -1348,6 +1502,20 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
                   GIS Grid
                 </button>
               </div>
+
+              {/* Generate PDF Report Button */}
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                role="button"
+                aria-haspopup="dialog"
+                aria-label="Generate PDF Report: CPCB Form 6 Hazardous Transit Manifest"
+                className="h-6 px-2.5 rounded-lg text-[11px] font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-sm shadow-emerald-950/40 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                title="Generate CPCB Form 6 Hazardous Transit Manifest & Fleet Telemetry PDF Report"
+              >
+                <FileText className="w-3 h-3 text-emerald-200" />
+                <span className="hidden sm:inline font-sans">Generate PDF Report</span>
+                <span className="sm:hidden font-sans">PDF</span>
+              </button>
             </div>
           </div>
 
@@ -1374,7 +1542,53 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
             </div>
 
             {/* Top-Right Control Buttons: Layer Control + All India / Corridor View */}
+            {/* Top-Right Control Buttons: Quick Layer Toggles + Detailed Layer Menu */}
             <div className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
+              {/* Quick 1-Click Layer Toggle Pills */}
+              <div className="hidden sm:flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/90 shadow-md backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={() => toggleLayer('traffic')}
+                  className={`h-6 px-2 rounded-md text-[10px] font-semibold flex items-center gap-1 transition ${
+                    activeLayers.traffic
+                      ? 'bg-rose-950 text-rose-300 border border-rose-600/60 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Toggle Traffic Density Layer"
+                >
+                  <Flame className="w-2.5 h-2.5" />
+                  <span>Traffic</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleLayer('hubs')}
+                  className={`h-6 px-2 rounded-md text-[10px] font-semibold flex items-center gap-1 transition ${
+                    activeLayers.hubs
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-600/60 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Toggle Logistics Hubs Layer"
+                >
+                  <Building2 className="w-2.5 h-2.5" />
+                  <span>Hubs</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleLayer('recyclers')}
+                  className={`h-6 px-2 rounded-md text-[10px] font-semibold flex items-center gap-1 transition ${
+                    activeLayers.recyclers
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/60 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Toggle Recycling Facilities Layer"
+                >
+                  <Factory className="w-2.5 h-2.5" />
+                  <span>Recyclers</span>
+                </button>
+              </div>
+
               {/* Interactive Layer Control Widget */}
               <div className="relative">
                 <button
@@ -1761,6 +1975,174 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       </div>
 
       {/* ========================================================= */}
+      {/* SECTION 1.5: PREDICTIVE DEMAND & 7-DAY COLLECTION HOTSPOTS*/}
+      {/* ========================================================= */}
+      <section
+        role="region"
+        aria-labelledby="predictive-demand-heading"
+        className="glass-panel rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden border border-slate-800/80"
+      >
+        {/* Subtle background ambient mesh */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 id="predictive-demand-heading" className="text-sm font-bold text-white tracking-tight flex items-center gap-2 font-sans">
+                  Predictive Demand • Upcoming Collection Hotspots (Next 7 Days)
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 flex items-center gap-1">
+                  <TrendingUp className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>AI Telemetry Model v3</span>
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Forecasted e-waste influx based on municipal commercial renewal cycles, tech park hardware depreciation patterns, and historical CPCB manifest logs.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs font-mono shrink-0">
+            <div className="text-right">
+              <span className="text-[10px] text-slate-400 block font-sans">7-Day Projected Influx</span>
+              <span className="text-sm font-bold text-emerald-400 font-mono">96.5 Metric Tonnes</span>
+            </div>
+            <div className="h-7 w-px bg-slate-800" />
+            <div className="text-right">
+              <span className="text-[10px] text-slate-400 block font-sans">Peak Hotspot</span>
+              <span className="text-sm font-bold text-cyan-400 font-mono">Whitefield (18.2 T)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 7-Day Interactive Horizon Selector */}
+        <div className="pt-3">
+          <div
+            role="tablist"
+            aria-label="Predictive 7-day forecast days"
+            className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2"
+          >
+            {PREDICTIVE_DEMAND_DATA.map((hotspot) => {
+              const isSelected = selectedForecastDay === hotspot.dayIndex;
+              return (
+                <button
+                  key={hotspot.dayIndex}
+                  role="tab"
+                  aria-selected={isSelected}
+                  aria-controls={`hotspot-panel-${hotspot.dayIndex}`}
+                  id={`hotspot-tab-${hotspot.dayIndex}`}
+                  onClick={() => setSelectedForecastDay(hotspot.dayIndex)}
+                  className={`p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none ${
+                    isSelected
+                      ? 'bg-gradient-to-b from-slate-800/90 to-slate-900 border-emerald-500/60 shadow-lg shadow-emerald-950/40 scale-[1.02]'
+                      : 'bg-slate-950/50 hover:bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className={`text-[10px] font-bold font-sans ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                      {hotspot.dayLabel}
+                    </span>
+                    <span className={`text-[8px] font-mono font-bold px-1.5 py-0.2 rounded-full ${
+                      hotspot.urgency === 'Critical Surge'
+                        ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                        : hotspot.urgency === 'High Demand'
+                        ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
+                        : 'bg-slate-900 text-slate-400 border border-slate-800'
+                    }`}>
+                      +{hotspot.surgePct}%
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-extrabold text-white font-mono">
+                      {hotspot.projectedTonnes} <span className="text-[10px] text-slate-400 font-sans font-normal">MT</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-sans truncate" title={hotspot.hotspotDistrict}>
+                      {hotspot.state}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selected Day Hotspot In-Depth Drilldown */}
+        {(() => {
+          const current = PREDICTIVE_DEMAND_DATA.find((h) => h.dayIndex === selectedForecastDay) || PREDICTIVE_DEMAND_DATA[0];
+          return (
+            <div
+              id={`hotspot-panel-${current.dayIndex}`}
+              role="tabpanel"
+              aria-labelledby={`hotspot-tab-${current.dayIndex}`}
+              className="mt-3.5 p-3.5 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800/90 grid grid-cols-1 md:grid-cols-12 gap-3 items-center"
+            >
+              <div className="md:col-span-8 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-mono font-semibold text-cyan-400">
+                    {current.dateStr}
+                  </span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-xs font-bold text-white flex items-center gap-1 font-sans">
+                    <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>{current.hotspotDistrict} ({current.state})</span>
+                  </span>
+                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded ${
+                    current.riskFactor === 'High Battery Risk'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                      : current.riskFactor === 'RoHS Heavy Metal'
+                      ? 'bg-purple-950 text-purple-300 border border-purple-800'
+                      : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                  }`}>
+                    {current.riskFactor}
+                  </span>
+                </div>
+
+                <div className="text-xs text-slate-300 flex items-center gap-1.5 font-sans">
+                  <span className="text-slate-400">Dominant Stream:</span>
+                  <span className="font-semibold text-white">{current.dominantCategory}</span>
+                </div>
+
+                <div className="text-xs text-emerald-400 flex items-center gap-1.5 font-sans bg-emerald-950/30 px-2.5 py-1.5 rounded-lg border border-emerald-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span><strong>Statutory Directive:</strong> {current.recommendedDispatch}</span>
+                </div>
+              </div>
+
+              <div className="md:col-span-4 flex flex-col sm:flex-row md:flex-col justify-end items-end gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedTruckId(current.assignedTruckId);
+                    setMapMode('live');
+                    setAllocationToast(`Fleet Vessel ${current.assignedTruckId} pre-allocated to ${current.hotspotDistrict}`);
+                    setTimeout(() => setAllocationToast(null), 4000);
+                  }}
+                  className="w-full sm:w-auto md:w-full px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Pre-allocate {current.assignedTruckId} to Hotspot</span>
+                </button>
+
+                {allocationToast && (
+                  <div
+                    aria-live="polite"
+                    className="w-full text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/60 rounded-lg px-2.5 py-1 text-center font-mono animate-fadeIn"
+                  >
+                    ✓ {allocationToast}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* ========================================================= */}
       {/* SECTION 2: LIVE FLEET TRACKING ROSTER TABLE               */}
       {/* ========================================================= */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 shadow-lg">
@@ -2094,6 +2476,14 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
           </div>
         )}
       </div>
+
+      {/* CPCB Form 6 Regulatory Transit & Fleet Manifest PDF Generator Modal */}
+      <FleetRegulatoryReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        trucks={trucks}
+        totalInTransitWeightKg={deviceMetrics.totalWeightInTransitKg}
+      />
     </div>
   );
 });

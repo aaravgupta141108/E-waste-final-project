@@ -132,6 +132,7 @@ export interface DeviceItem {
   certificateId?: string;
   certificateHash?: string;
   co2SavedKg: number;
+  notes?: string;
 }
 
 export interface RecyclerPartner {

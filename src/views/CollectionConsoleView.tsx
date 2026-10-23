@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   HardHat,
   Search,
@@ -19,9 +19,25 @@ import {
   Lock,
   ArrowRight,
   RefreshCw,
-  Plus
+  Plus,
+  Wifi,
+  WifiOff,
+  Database,
+  Check,
+  Clock,
+  PlusCircle,
+  CheckCheck,
+  Trash2,
+  X
 } from 'lucide-react';
 import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile, WipeRecord } from '../types';
+import {
+  saveOfflineDeviceLog,
+  getPendingOfflineDeviceLogs,
+  clearAllOfflineDeviceLogs,
+  deleteOfflineDeviceLog,
+  OfflineDeviceRecord
+} from '../utils/offlineDb';
 
 interface CollectionConsoleViewProps {
   devices: DeviceItem[];
@@ -36,8 +52,126 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
   onUpdateDeviceStatus,
   onBulkImportDevices
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'intake' | 'cv_sorter' | 'wipe_station' | 'dispatch_geo' | 'bulk_import'>('intake');
+  const [activeSubTab, setActiveSubTab] = useState<'intake' | 'cv_sorter' | 'wipe_station' | 'dispatch_geo' | 'bulk_import' | 'field_offline'>('intake');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(devices[0]?.id || '');
+
+  // Offline Field Intake & IndexedDB Queue State
+  const [pendingOfflineLogs, setPendingOfflineLogs] = useState<OfflineDeviceRecord[]>([]);
+  const [isFieldIntakeModalOpen, setIsFieldIntakeModalOpen] = useState(false);
+  const [isSimulatingLowConnectivity, setIsSimulatingLowConnectivity] = useState(false);
+  const [isOnlineState, setIsOnlineState] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Field intake modal inputs
+  const [fieldCategory, setFieldCategory] = useState<DeviceCategory>('Smartphone');
+  const [fieldBrand, setFieldBrand] = useState('Samsung');
+  const [fieldModel, setFieldModel] = useState('Galaxy M31 Enterprise');
+  const [fieldSerial, setFieldSerial] = useState(`SN-${Date.now().toString().slice(-6)}`);
+  const [fieldImei, setFieldImei] = useState('864920048192837');
+  const [fieldWeight, setFieldWeight] = useState('0.19');
+  const [fieldCondition, setFieldCondition] = useState<DeviceCondition>('working');
+  const [fieldCitizenName, setFieldCitizenName] = useState('Field Camp Consignor');
+  const [fieldCitizenPhone, setFieldCitizenPhone] = useState('+91 98765 43210');
+  const [fieldNotes, setFieldNotes] = useState('Collected via remote rural camp in low-connectivity zone');
+
+  // Load offline records from IndexedDB
+  const loadPendingLogs = async () => {
+    try {
+      const logs = await getPendingOfflineDeviceLogs();
+      setPendingOfflineLogs(logs);
+    } catch (e) {
+      console.warn('Failed to load pending offline logs:', e);
+    }
+  };
+
+  useEffect(() => {
+    loadPendingLogs();
+    const handleUpdate = () => loadPendingLogs();
+    const handleOnline = () => setIsOnlineState(true);
+    const handleOffline = () => setIsOnlineState(false);
+
+    window.addEventListener('offline-db-updated', handleUpdate);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('offline-db-updated', handleUpdate);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleSaveFieldIntake = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const effectiveOffline = !isOnlineState || isSimulatingLowConnectivity;
+    const weightNum = parseFloat(fieldWeight) || 0.25;
+
+    if (effectiveOffline) {
+      await saveOfflineDeviceLog({
+        category: fieldCategory,
+        brand: fieldBrand,
+        model: fieldModel,
+        serialNumber: fieldSerial,
+        imei: fieldImei,
+        condition: fieldCondition,
+        intakeWeightKg: weightNum,
+        hubLocation: currentUser.organization || 'Field Mobile Unit',
+        engineerId: currentUser.id,
+        engineerName: currentUser.name,
+        notes: fieldNotes
+      });
+      alert(`[OFFLINE SAVED] Consignment stored in IndexedDB. Will sync automatically once online.`);
+    } else {
+      onBulkImportDevices([{
+        category: fieldCategory,
+        brand: fieldBrand,
+        model: fieldModel,
+        serialNumber: fieldSerial,
+        imei: fieldImei,
+        condition: fieldCondition,
+        intakeWeightKg: weightNum,
+        userName: fieldCitizenName,
+        userPhone: fieldCitizenPhone,
+        hubLocation: currentUser.organization,
+        notes: fieldNotes
+      }]);
+      alert(`Consignment onboarded and synchronized directly to central registry!`);
+    }
+
+    setIsFieldIntakeModalOpen(false);
+    loadPendingLogs();
+  };
+
+  const handleSyncLocalLogs = async () => {
+    if (pendingOfflineLogs.length === 0) return;
+    setIsSyncing(true);
+    try {
+      const itemsToImport: Partial<DeviceItem>[] = pendingOfflineLogs.map(log => ({
+        category: log.category as DeviceCategory,
+        brand: log.brand,
+        model: log.model,
+        serialNumber: log.serialNumber,
+        imei: log.imei,
+        condition: log.condition,
+        intakeWeightKg: log.intakeWeightKg,
+        userName: 'Field Camp Consignor (Synced)',
+        hubLocation: log.hubLocation,
+        notes: log.notes
+      }));
+
+      onBulkImportDevices(itemsToImport);
+      await clearAllOfflineDeviceLogs();
+      await loadPendingLogs();
+      alert(`Synced ${itemsToImport.length} buffered consignments to the national registry!`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDeleteSingleOffline = async (id: string) => {
+    await deleteOfflineDeviceLog(id);
+    await loadPendingLogs();
+  };
 
   // AI CV Sorter State
   const [cvImage, setCvImage] = useState<string | null>(null);
@@ -243,9 +377,9 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" role="region" aria-label="Collection and Field Operations Hub">
       {/* Top Banner */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-orange-950/50 border border-amber-800/50 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-orange-950/50 border border-amber-800/50 backdrop-blur-md shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
             <HardHat className="w-7 h-7" />
@@ -263,17 +397,72 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Hub Active Intake Pool:</span>
-          <span className="text-sm font-bold text-amber-400 bg-amber-950/80 px-2.5 py-1 rounded-lg border border-amber-800/80 font-mono">
-            {devices.length} Units
-          </span>
+        {/* Offline Buffer & Actions Bar */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Low-connectivity simulation / field mode toggle */}
+          <button
+            onClick={() => setIsSimulatingLowConnectivity(prev => !prev)}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition ${
+              isSimulatingLowConnectivity || !isOnlineState
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                : 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Simulate low-connectivity or remote field operation without cell coverage"
+            aria-label="Toggle low-connectivity field mode"
+          >
+            {isSimulatingLowConnectivity || !isOnlineState ? (
+              <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>
+              {isSimulatingLowConnectivity
+                ? 'Field Low-Signal Mode (Active)'
+                : !isOnlineState
+                ? 'Offline Mode'
+                : 'Live Cloud Connected'}
+            </span>
+          </button>
+
+          {/* Pending IndexedDB records indicator / sync button */}
+          {pendingOfflineLogs.length > 0 && (
+            <button
+              onClick={handleSyncLocalLogs}
+              disabled={isSyncing}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition animate-pulse"
+              aria-label={`Sync ${pendingOfflineLogs.length} pending consignments stored in IndexedDB`}
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>
+                {isSyncing ? 'Syncing...' : `Sync Offline Buffer (${pendingOfflineLogs.length})`}
+              </span>
+            </button>
+          )}
+
+          {/* Direct Field Consignment Button */}
+          <button
+            onClick={() => setIsFieldIntakeModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition shadow-lg shadow-amber-600/20 flex items-center gap-1.5"
+            aria-label="Log new field consignment"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+ Field Consignment Intake</span>
+          </button>
+
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            <span className="text-xs text-slate-400">Pool:</span>
+            <span className="text-sm font-bold text-amber-400 bg-amber-950/80 px-2.5 py-1 rounded-lg border border-amber-800/80 font-mono">
+              {devices.length}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Sub Tabs */}
-      <div className="flex border-b border-slate-800 overflow-x-auto no-scrollbar">
+      <div className="flex border-b border-slate-800 overflow-x-auto no-scrollbar" role="tablist" aria-label="Collection console subtabs">
         <button
+          role="tab"
+          aria-selected={activeSubTab === 'intake'}
           onClick={() => setActiveSubTab('intake')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeSubTab === 'intake'
@@ -285,6 +474,26 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           <span>Device Intake & IMEI Check</span>
         </button>
         <button
+          role="tab"
+          aria-selected={activeSubTab === 'field_offline'}
+          onClick={() => setActiveSubTab('field_offline')}
+          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+            activeSubTab === 'field_offline'
+              ? 'border-amber-500 text-amber-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Database className="w-4 h-4" />
+          <span>Field Offline Hub</span>
+          {pendingOfflineLogs.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500 text-slate-950 font-extrabold">
+              {pendingOfflineLogs.length}
+            </span>
+          )}
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeSubTab === 'cv_sorter'}
           onClick={() => setActiveSubTab('cv_sorter')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeSubTab === 'cv_sorter'
@@ -296,6 +505,8 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           <span>AI Computer Vision Sorter</span>
         </button>
         <button
+          role="tab"
+          aria-selected={activeSubTab === 'wipe_station'}
           onClick={() => setActiveSubTab('wipe_station')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeSubTab === 'wipe_station'
@@ -307,6 +518,8 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           <span>NIST Data Wiping Station</span>
         </button>
         <button
+          role="tab"
+          aria-selected={activeSubTab === 'dispatch_geo'}
           onClick={() => setActiveSubTab('dispatch_geo')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeSubTab === 'dispatch_geo'
@@ -318,6 +531,8 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           <span>Live Geotagged Scale Dispatch</span>
         </button>
         <button
+          role="tab"
+          aria-selected={activeSubTab === 'bulk_import'}
           onClick={() => setActiveSubTab('bulk_import')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeSubTab === 'bulk_import'
@@ -934,6 +1149,401 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* SubTab 6: Field Offline Hub & IndexedDB Storage Buffer */}
+      {activeSubTab === 'field_offline' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Database className="w-5 h-5 text-amber-400" />
+                  <span>Field Offline Hub & IndexedDB Buffer</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Local offline storage engine for collection engineers operating in remote villages, collection vans, and low-connectivity basements without cellular data.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsFieldIntakeModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-lg shadow-amber-600/20"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ New Field Intake</span>
+                </button>
+
+                {pendingOfflineLogs.length > 0 && (
+                  <button
+                    onClick={handleSyncLocalLogs}
+                    disabled={isSyncing}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/20"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    <span>Sync All ({pendingOfflineLogs.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Offline Status Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
+              <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                <div className="text-slate-400 text-[11px] font-medium flex items-center justify-between">
+                  <span>Buffered Field Consignments</span>
+                  <Database className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <div className="text-xl font-bold text-white mt-1 font-mono">
+                  {pendingOfflineLogs.length} Units
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Stored in BharatEwasteHub_OfflineDB
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                <div className="text-slate-400 text-[11px] font-medium flex items-center justify-between">
+                  <span>Buffer Total Weight</span>
+                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
+                  {pendingOfflineLogs.reduce((sum, item) => sum + item.intakeWeightKg, 0).toFixed(2)} kg
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Physical payload waiting for sync
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                <div className="text-slate-400 text-[11px] font-medium flex items-center justify-between">
+                  <span>Connection Engine</span>
+                  {isSimulatingLowConnectivity || !isOnlineState ? (
+                    <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+                  ) : (
+                    <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                  )}
+                </div>
+                <div className="text-sm font-bold text-white mt-1">
+                  {isSimulatingLowConnectivity
+                    ? 'Simulated Low-Connectivity'
+                    : !isOnlineState
+                    ? 'Browser Offline'
+                    : 'Online & Sync Ready'}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  ServiceWorker Cache Active
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Queued Records Cards */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                IndexedDB Local Queue ({pendingOfflineLogs.length})
+              </span>
+              {pendingOfflineLogs.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (confirm('Clear all locally buffered records without syncing?')) {
+                      await clearAllOfflineDeviceLogs();
+                      await loadPendingLogs();
+                    }
+                  }}
+                  className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge Local Buffer</span>
+                </button>
+              )}
+            </div>
+
+            {pendingOfflineLogs.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-900/40 border border-slate-800/80 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <CheckCheck className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-white">Local Buffer is In Sync</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  There are no unsynced consignments in browser storage. Any items you log while working offline will be safely queued here until connectivity returns.
+                </p>
+                <button
+                  onClick={() => setIsFieldIntakeModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition"
+                >
+                  Log a Field Consignment
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {pendingOfflineLogs.map((log) => (
+                  <div
+                    key={log.offlineId}
+                    className="p-4 rounded-xl bg-slate-900/90 border border-amber-800/40 hover:border-amber-600/60 transition space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">
+                            {log.brand} {log.model}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                            LOCAL BUFFER
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {log.category} • Condition: {log.condition}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteSingleOffline(log.offlineId)}
+                        className="text-slate-500 hover:text-rose-400 transition p-1"
+                        title="Delete from local buffer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 font-mono">
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">WEIGHT</span>
+                        <span className="text-white font-semibold">{log.intakeWeightKg} kg</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">IMEI / SERIAL</span>
+                        <span className="text-slate-300 truncate block">{log.imei || log.serialNumber}</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {log.loggedAt}
+                        </span>
+                        <span className="text-amber-400">{log.engineerName}</span>
+                      </div>
+                    </div>
+
+                    {log.notes && (
+                      <p className="text-[11px] text-slate-400 italic">
+                        &quot;{log.notes}&quot;
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: New Field Consignment Intake */}
+      {isFieldIntakeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="field-intake-title"
+        >
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2">
+                <HardHat className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 id="field-intake-title" className="text-sm font-bold text-white">
+                    Field Consignment Intake
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {isSimulatingLowConnectivity || !isOnlineState
+                      ? 'Offline Mode Active: Saving to local IndexedDB'
+                      : 'Online: Direct Central Registry Sync'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsFieldIntakeModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveFieldIntake} className="p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={fieldCategory}
+                    onChange={(e) => setFieldCategory(e.target.value as DeviceCategory)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Smartphone">Smartphone</option>
+                    <option value="Laptop">Laptop</option>
+                    <option value="Tablet">Tablet</option>
+                    <option value="PCB & Component Board">PCB & Component Board</option>
+                    <option value="Lithium Battery Pack">Lithium Battery Pack</option>
+                    <option value="CRT/LED Display Panel">CRT/LED Display Panel</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Condition Grade *
+                  </label>
+                  <select
+                    value={fieldCondition}
+                    onChange={(e) => setFieldCondition(e.target.value as DeviceCondition)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="working">Working / Bootable</option>
+                    <option value="locked">Software Locked / BIOS Locked</option>
+                    <option value="not_booting">Not Booting / Hardware Damaged</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Brand *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={fieldBrand}
+                    onChange={(e) => setFieldBrand(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Model *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={fieldModel}
+                    onChange={(e) => setFieldModel(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Serial Number
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldSerial}
+                    onChange={(e) => setFieldSerial(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    IMEI (If cellular)
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldImei}
+                    onChange={(e) => setFieldImei(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Digital Scale Weight (kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={fieldWeight}
+                    onChange={(e) => setFieldWeight(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Consignor Contact Mobile
+                  </label>
+                  <input
+                    type="text"
+                    value={fieldCitizenPhone}
+                    onChange={(e) => setFieldCitizenPhone(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Field Notes & Location Tag
+                </label>
+                <input
+                  type="text"
+                  value={fieldNotes}
+                  onChange={(e) => setFieldNotes(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Status Note */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center gap-2">
+                {isSimulatingLowConnectivity || !isOnlineState ? (
+                  <>
+                    <Database className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-amber-300">
+                      Record will be saved to IndexedDB storage. You can continue collecting devices even without 4G/5G signal.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-emerald-300">
+                      Live connection detected: Record will be sent directly to central registry and mirrored offline.
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFieldIntakeModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white transition shadow-lg shadow-amber-600/20 flex items-center gap-1.5"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>
+                    {isSimulatingLowConnectivity || !isOnlineState
+                      ? 'Save to Offline Buffer'
+                      : 'Record & Synchronize'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

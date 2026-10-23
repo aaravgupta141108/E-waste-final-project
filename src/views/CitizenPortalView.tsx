@@ -20,10 +20,12 @@ import {
   ExternalLink,
   ChevronRight,
   IndianRupee,
-  Leaf
+  Leaf,
+  Camera
 } from 'lucide-react';
 import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile } from '../types';
 import { RATE_TABLE } from '../data/mockData';
+import { DeviceLifecycleTimeline } from '../components/DeviceLifecycleTimeline';
 
 interface CitizenPortalViewProps {
   currentUser: UserProfile;
@@ -34,6 +36,8 @@ interface CitizenPortalViewProps {
   onAcknowledgePayment: (deviceId: string) => void;
   onOpenQrModal: () => void;
   onAdvanceDeviceStage?: (deviceId: string) => void;
+  onOpenScanModal?: () => void;
+  initialScannedTag?: string;
 }
 
 export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
@@ -44,9 +48,13 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   onUpdatePaymentPreference,
   onAcknowledgePayment,
   onOpenQrModal,
-  onAdvanceDeviceStage
+  onAdvanceDeviceStage,
+  onOpenScanModal,
+  initialScannedTag
 }) => {
-  const [activeTab, setActiveTab] = useState<'my_devices' | 'register_new' | 'rates_catalog'>('my_devices');
+  const [activeTab, setActiveTab] = useState<'my_devices' | 'register_new' | 'rates_catalog'>(
+    initialScannedTag ? 'register_new' : 'my_devices'
+  );
   const [selectedDevice, setSelectedDevice] = useState<DeviceItem | null>(devices[0] || null);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
@@ -78,6 +86,15 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   const [upiInput, setUpiInput] = useState(currentUser.upiId || '');
   const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [paymentSavedMsg, setPaymentSavedMsg] = useState(false);
+
+  // Auto-populate when scanned tag arrives from camera scanner
+  React.useEffect(() => {
+    if (initialScannedTag) {
+      setFormSerial(initialScannedTag);
+      setFormImei(initialScannedTag);
+      setActiveTab('register_new');
+    }
+  }, [initialScannedTag]);
 
   const handleCreateDevice = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +189,30 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
     }
   };
 
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status) {
+      case 'CERTIFIED':
+        // Reserve glowing emerald exclusively for final certificate and success outcome
+        return 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm shadow-emerald-500/25';
+      case 'READY_FOR_DISPATCH':
+        return 'bg-sky-950/90 text-sky-300 border border-sky-500/40';
+      case 'WIPE_VERIFIED':
+        return 'bg-purple-950/90 text-purple-300 border border-purple-500/40';
+      case 'WIPING':
+      case 'FACTORY_INSPECTION':
+        return 'bg-amber-950/90 text-amber-300 border border-amber-500/40';
+      case 'PAYMENT_SENT':
+      case 'PAYMENT_ACKNOWLEDGED':
+        return 'bg-teal-950/90 text-teal-300 border border-teal-500/40';
+      case 'HOLD':
+        return 'bg-amber-950 text-amber-400 border border-amber-600';
+      case 'FLAGGED':
+        return 'bg-rose-950 text-rose-300 border border-rose-600';
+      default:
+        return 'bg-slate-900 text-slate-300 border border-slate-700';
+    }
+  };
+
   // User's total CO2
   const userCo2Saved = devices.reduce((sum, d) => sum + (d.co2SavedKg || 0), 0);
   const treesEquiv = Math.round(userCo2Saved / 22);
@@ -206,41 +247,54 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
         </div>
       </div>
 
-      {/* Sub Tabs */}
-      <div className="flex border-b border-slate-800">
-        <button
-          onClick={() => setActiveTab('my_devices')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-            activeTab === 'my_devices'
-              ? 'border-emerald-500 text-emerald-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Smartphone className="w-4 h-4" />
-          <span>My Registered Devices ({devices.length})</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('register_new')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-            activeTab === 'register_new'
-              ? 'border-emerald-500 text-emerald-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Register New E-Waste</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('rates_catalog')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-            activeTab === 'rates_catalog'
-              ? 'border-emerald-500 text-emerald-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <IndianRupee className="w-4 h-4" />
-          <span>National Price Index & Categories</span>
-        </button>
+      {/* Sub Tabs + Quick Camera QR Scan Trigger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 gap-2">
+        <div className="flex">
+          <button
+            onClick={() => setActiveTab('my_devices')}
+            className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+              activeTab === 'my_devices'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>My Registered Devices ({devices.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('register_new')}
+            className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+              activeTab === 'register_new'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register New E-Waste</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('rates_catalog')}
+            className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+              activeTab === 'rates_catalog'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <IndianRupee className="w-4 h-4" />
+            <span>National Price Index & Categories</span>
+          </button>
+        </div>
+
+        {onOpenScanModal && (
+          <button
+            onClick={onOpenScanModal}
+            className="mb-2 sm:mb-0 h-8 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+            title="Scan physical CPCB barcode or QR code using device camera"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Scan CPCB Tag (Camera)</span>
+          </button>
+        )}
       </div>
 
       {/* View Content */}
@@ -315,23 +369,33 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
 
             {devices.map((device) => {
               const isSelected = selectedDevice?.id === device.id;
-              const isHold = device.status === 'HOLD';
-              const isFlagged = device.status === 'FLAGGED';
               const stageIdx = getStageIndex(device.status);
 
               return (
                 <div
                   key={device.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-label={`Select ${device.brand} ${device.model}, status ${device.status}`}
                   onClick={() => setSelectedDevice(device)}
-                  className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedDevice(device);
+                    }
+                  }}
+                  className={`transition-all duration-200 cursor-pointer rounded-2xl border ${
                     isSelected
-                      ? 'bg-slate-800/80 border-emerald-500/50 shadow-lg'
-                      : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-800/40'
+                      ? 'p-4 sm:p-5 bg-gradient-to-b from-slate-850 to-slate-900 border-emerald-500/50 shadow-2xl shadow-emerald-950/30 ring-1 ring-emerald-500/20 scale-[1.01]'
+                      : 'p-3.5 bg-slate-950/60 border-slate-800/80 hover:bg-slate-900/60 hover:border-slate-700/80'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2.5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                      <div className={`rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0 transition-all ${
+                        isSelected ? 'w-12 h-12 ring-2 ring-emerald-500/30 shadow-md' : 'w-10 h-10'
+                      }`}>
                         {device.intakeImageUrl ? (
                           <img
                             src={device.intakeImageUrl}
@@ -343,28 +407,25 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                         )}
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-white">
-                          {device.brand} {device.model}
-                        </h4>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className={`font-bold ${isSelected ? 'text-white text-sm sm:text-base' : 'text-slate-200 text-xs sm:text-sm'}`}>
+                            {device.brand} {device.model}
+                          </h4>
+                          {isSelected && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-400">
-                          {device.category} • {device.condition}
+                          {device.category} • <span className="capitalize">{device.condition.replace('_', ' ')}</span>
                         </p>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span
-                        className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase ${
-                          isHold
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                            : isFlagged
-                            ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                            : device.status === 'CERTIFIED'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
-                        }`}
+                        className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusBadgeStyle(device.status)}`}
                       >
-                        {device.status}
+                        {device.status.replace(/_/g, ' ')}
                       </span>
                       <span className="text-[9px] font-mono text-emerald-400 font-semibold">
                         Step {stageIdx + 1}/10
@@ -372,9 +433,23 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-800/70 flex items-center justify-between text-xs">
-                    <span className="text-slate-400 font-mono text-[11px]">{device.id}</span>
-                    <span className="text-emerald-400 font-semibold">
+                  {/* Asymmetric Rich Expanded View for Selected Card */}
+                  {isSelected && (
+                    <div className="mt-3 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[10px] font-mono bg-slate-950/50 p-2.5 rounded-xl">
+                      <div>
+                        <span className="text-slate-500 block font-sans">Storage Sanitization</span>
+                        <span className="text-cyan-300 font-semibold">{device.storageType || 'UFS Flash'} ({device.storageSizeGb || 128} GB)</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-500 block font-sans">CO₂ Offset</span>
+                        <span className="text-emerald-400 font-semibold">+{device.co2SavedKg || 58} kg CO₂e</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-500 text-[10px]">{device.id}</span>
+                    <span className="text-emerald-400 font-bold">
                       ₹{device.payoutAmount.toLocaleString()} ({device.payoutMethod})
                     </span>
                   </div>
@@ -449,89 +524,12 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                 </div>
               )}
 
-              {/* Prominent Current Processing Step Indicator Card */}
-              <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-cyan-950/60 border border-emerald-500/40 shadow-lg space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-mono font-bold text-sm shrink-0 shadow-md shadow-emerald-500/10">
-                      {getStageIndex(selectedDevice.status) + 1}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                          CURRENT PROCESSING STEP
-                        </span>
-                        <span className="text-xs font-bold text-white">
-                          Step {getStageIndex(selectedDevice.status) + 1} of 10: {pipelineStages[getStageIndex(selectedDevice.status)]?.label}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                        {getStepDescription(selectedDevice.status)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {onAdvanceDeviceStage && getStageIndex(selectedDevice.status) < 9 && (
-                    <button
-                      onClick={() => onAdvanceDeviceStage(selectedDevice.id)}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-2 transition shadow-lg shadow-emerald-600/30 shrink-0 transform hover:scale-105"
-                      title="Advance device to the next stage in the circular lifecycle"
-                    >
-                      <span>Simulate Next Step</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 10-Stage Horizontal Tracker */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Statutory Chain of Custody Lifecycle (10 Stages)
-                  </span>
-                  <span className="text-xs text-emerald-400 font-semibold">
-                    Current: {selectedDevice.status}
-                  </span>
-                </div>
-
-                <div className="relative pt-2 pb-4 overflow-x-auto no-scrollbar">
-                  <div className="flex items-center gap-2 min-w-[680px]">
-                    {pipelineStages.map((stage, idx) => {
-                      const currentIdx = getStageIndex(selectedDevice.status);
-                      const isCompleted = idx < currentIdx;
-                      const isCurrent = idx === currentIdx;
-
-                      return (
-                        <div key={stage.key} className="flex-1 flex flex-col items-center relative">
-                          <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold z-10 transition ${
-                              isCompleted
-                                ? 'bg-emerald-500 text-slate-950'
-                                : isCurrent
-                                ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/20'
-                                : 'bg-slate-800 text-slate-500'
-                            }`}
-                          >
-                            {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-                          </div>
-                          <span
-                            className={`text-[10px] mt-2 font-medium text-center ${
-                              isCurrent
-                                ? 'text-emerald-400 font-bold'
-                                : isCompleted
-                                ? 'text-slate-300'
-                                : 'text-slate-400'
-                            }`}
-                          >
-                            {stage.short}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
+              {/* Step-by-Step Device Lifecycle Progress Timeline (Registered -> WIPING -> CERTIFIED) */}
+              <DeviceLifecycleTimeline
+                device={selectedDevice}
+                onAdvanceStage={onAdvanceDeviceStage}
+                canAdvance={true}
+              />
 
               {/* Hardware Specifications Read by Hub Engineer */}
               <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-3">

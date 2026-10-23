@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PrakritiAssistant } from './components/PrakritiAssistant';
@@ -19,7 +20,8 @@ import { DEMO_USERS, MOCK_DEVICES, SYSTEM_ALERTS, INITIAL_COMPLIANCE_REMINDERS }
 import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert, UserProfile } from './types';
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  // Launch login page first by default
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentRole, setCurrentRole] = useState<Role>('citizen');
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -383,10 +385,36 @@ export default function App() {
         : devices.filter((d) => d.userId === currentUser.id || d.userId === 'USR-IND-8821')
       : devices;
 
+  const handleSyncOfflineDevice = (newDeviceData: Partial<DeviceItem>) => {
+    handleRegisterDevice(newDeviceData);
+    const newAlert: SystemAlert = {
+      id: `ALT-SYNC-${Date.now().toString().slice(-4)}`,
+      timestamp: 'Just now',
+      type: 'data_integrity',
+      title: 'Offline Field Records Synced',
+      message: `Consignment ${newDeviceData.brand || 'Device'} ${newDeviceData.model || ''} logged in offline field mode was uploaded to National Hub.`,
+      severity: 'low',
+      resolved: false,
+      linkToTab: 'dashboard'
+    };
+    setAlerts((prev) => [newAlert, ...prev]);
+  };
+
   const unreadAlertCount = alerts.filter((a) => !a.resolved).length;
 
+  // Strict Role-Based Access Control definition
+  const ROLE_ALLOWED_TABS: Record<Role, string[]> = {
+    citizen: ['dashboard', 'carbon', 'leaderboard'],
+    collection_engineer: ['dashboard', 'fleet', 'carbon'],
+    factory_engineer: ['dashboard', 'fleet', 'carbon'],
+    auditor: ['dashboard', 'fleet', 'compliance', 'carbon'],
+    admin: ['dashboard', 'fleet', 'compliance', 'carbon', 'leaderboard']
+  };
+
+  const isTabAllowed = ROLE_ALLOWED_TABS[currentRole]?.includes(activeTab);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-[#070a11] text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
       {/* Navigation Header */}
       <Navbar
         currentRole={currentRole}
@@ -404,27 +432,54 @@ export default function App() {
         unreadAlertCount={unreadAlertCount}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        onSyncOfflineDevice={handleSyncOfflineDevice}
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full ${activeTab === 'fleet' ? 'max-w-[1720px] mx-auto px-2 sm:px-4 py-2' : 'max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'}`}>
-        {/* Tab Router */}
-        {activeTab === 'dashboard' && (
+      <main
+        id="main-content"
+        role="main"
+        className={`flex-1 w-full ${activeTab === 'fleet' ? 'max-w-[1720px] mx-auto px-2 sm:px-4 py-2' : 'max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'}`}
+      >
+        {/* Role-Based Access Gate if unauthorized tab is navigated */}
+        {!isTabAllowed ? (
+          <div role="region" aria-label="Restricted Module Access" className="p-8 sm:p-14 text-center rounded-2xl glass-panel space-y-4 max-w-xl mx-auto my-12">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold text-white tracking-tight">Statutory Access Restriction</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              This module requires official statutory officer clearance (CPCB Auditor, Hub Logistics, or Apex Admin).
+              Your active authenticated profile ({currentUser.name}) is signed in under <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>.
+            </p>
+            <div className="pt-2 flex justify-center gap-3">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-900/30"
+              >
+                Return to My Authorized Console
+              </button>
+            </div>
+          </div>
+        ) : (
           <>
-            {currentRole === 'citizen' && (
-              <CitizenPortalView
-                currentUser={currentUser}
-                devices={visibleDevices}
-                onRegisterDevice={handleRegisterDevice}
-                onConfirmDetails={handleConfirmDetails}
-                onUpdatePaymentPreference={(upiId) => {
-                  currentUser.upiId = upiId;
-                }}
-                onAcknowledgePayment={handleAcknowledgePayment}
-                onOpenQrModal={() => setIsQrModalOpen(true)}
-                onAdvanceDeviceStage={handleAdvanceDeviceStage}
-              />
-            )}
+            {/* Tab Router */}
+            {activeTab === 'dashboard' && (
+              <>
+                {currentRole === 'citizen' && (
+                  <CitizenPortalView
+                    currentUser={currentUser}
+                    devices={visibleDevices}
+                    onRegisterDevice={handleRegisterDevice}
+                    onConfirmDetails={handleConfirmDetails}
+                    onUpdatePaymentPreference={(upiId) => {
+                      currentUser.upiId = upiId;
+                    }}
+                    onAcknowledgePayment={handleAcknowledgePayment}
+                    onOpenQrModal={() => setIsQrModalOpen(true)}
+                    onAdvanceDeviceStage={handleAdvanceDeviceStage}
+                  />
+                )}
 
             {currentRole === 'collection_engineer' && (
               <CollectionConsoleView
@@ -492,6 +547,8 @@ export default function App() {
         )}
 
         {activeTab === 'leaderboard' && <LeaderboardView />}
+          </>
+        )}
       </main>
 
       {/* Footer Notice */}
