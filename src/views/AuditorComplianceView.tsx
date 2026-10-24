@@ -22,6 +22,7 @@ import { AUDIT_LOGS, CPCB_RECYCLERS, NATIONAL_STATS } from '../data/mockData';
 import { ComplianceDeadlineReminder, AuditLogEntry, DeviceItem, UserProfile } from '../types';
 import { ComplianceCalendar } from '../components/ComplianceCalendar';
 import { ComplianceHistoryLog } from '../components/ComplianceHistoryLog';
+import { ComplianceHeatmap } from '../components/ComplianceHeatmap';
 
 interface AuditorComplianceViewProps {
   currentUser: UserProfile;
@@ -42,7 +43,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   onDeleteReminder = () => {},
   onTriggerPushNotification = () => {}
 }) => {
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'history' | 'calendar' | 'cpcb_targets' | 'audit_trail' | 'recycler_directory'>('scorecard');
+  const [activeTab, setActiveTab] = useState<'scorecard' | 'history' | 'calendar' | 'cpcb_targets' | 'heatmap' | 'audit_trail' | 'recycler_directory'>('scorecard');
   const [searchLog, setSearchLog] = useState('');
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
 
@@ -141,6 +142,20 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           <span>Quarterly EPR Targets vs Actuals</span>
         </button>
         <button
+          onClick={() => setActiveTab('heatmap')}
+          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+            activeTab === 'heatmap'
+              ? 'border-purple-500 text-purple-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>Regional Targets &amp; District Heatmap</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
+            Underperforming Districts
+          </span>
+        </button>
+        <button
           onClick={() => setActiveTab('audit_trail')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
             activeTab === 'audit_trail'
@@ -217,7 +232,14 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={() => setActiveTab('heatmap')}
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>Regional Heatmap &amp; Underperforming Districts</span>
+              </button>
               <button
                 onClick={() => setActiveTab('calendar')}
                 className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
@@ -360,6 +382,11 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Regional E-Waste Compliance Heatmap & District Matrix */}
+      {activeTab === 'heatmap' && (
+        <ComplianceHeatmap />
       )}
 
       {/* Tab 3: Immutable Audit Log */}

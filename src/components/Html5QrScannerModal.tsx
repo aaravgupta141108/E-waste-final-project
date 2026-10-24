@@ -20,6 +20,7 @@ interface Html5QrScannerModalProps {
   devices: DeviceItem[];
   onSelectDevice: (deviceId: string) => void;
   onRegisterWithTag: (scannedTag: string) => void;
+  onQuickAddDevice?: (scannedTag: string) => void;
 }
 
 export const Html5QrScannerModal: React.FC<Html5QrScannerModalProps> = ({
@@ -27,7 +28,8 @@ export const Html5QrScannerModal: React.FC<Html5QrScannerModalProps> = ({
   onClose,
   devices,
   onSelectDevice,
-  onRegisterWithTag
+  onRegisterWithTag,
+  onQuickAddDevice
 }) => {
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [scannerError, setScannerError] = useState<string | null>(null);
@@ -312,20 +314,40 @@ export const Html5QrScannerModal: React.FC<Html5QrScannerModalProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                  <p className="text-xs text-slate-300">
-                    This tag is not yet attached to an active consignment in your registry.
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center gap-2 text-cyan-300">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs font-bold text-white">Unregistered E-Waste Asset Tag Detected</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Serial/Asset Tag: <span className="font-mono text-cyan-400 font-bold">{scannedResult}</span>. Ready to add to your registered inventory.
                   </p>
-                  <button
-                    onClick={() => {
-                      onRegisterWithTag(scannedResult);
-                      onClose();
-                    }}
-                    className="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow"
-                  >
-                    <span>Register New Device with Tag</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {onQuickAddDevice && (
+                      <button
+                        onClick={() => {
+                          onQuickAddDevice(scannedResult);
+                          onClose();
+                        }}
+                        className="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Quick-Add Device (1-Click)</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        onRegisterWithTag(scannedResult);
+                        onClose();
+                      }}
+                      className="py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>Pre-fill Registration Form</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -340,22 +362,34 @@ export const Html5QrScannerModal: React.FC<Html5QrScannerModalProps> = ({
 
           {/* Sample test QR tags */}
           <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-1.5">
-            <span className="block text-slate-500 font-medium">Test Sample National CPCB Tags:</span>
+            <span className="block text-slate-500 font-medium">Test Sample QR Codes &amp; Asset Tags:</span>
             <div className="flex flex-wrap gap-1.5 font-mono text-[10px]">
-              {devices.slice(0, 3).map((d) => (
+              {devices.slice(0, 2).map((d) => (
                 <button
                   key={d.id}
                   onClick={() => handleScanSuccess(d.id)}
                   className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
                 >
-                  {d.id} ({d.brand})
+                  Existing: {d.id}
                 </button>
               ))}
               <button
-                onClick={() => handleScanSuccess(`CPCB-TAG-${Math.floor(100000 + Math.random() * 900000)}`)}
+                onClick={() => handleScanSuccess('SN-IPH15-88219')}
+                className="px-2 py-1 rounded bg-teal-950/80 hover:bg-teal-900 text-teal-300 border border-teal-800 transition"
+              >
+                + iPhone 15 [SN-IPH15-88219]
+              </button>
+              <button
+                onClick={() => handleScanSuccess('SN-DELL-LAT-5420')}
+                className="px-2 py-1 rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 transition"
+              >
+                + Dell Latitude [SN-DELL-5420]
+              </button>
+              <button
+                onClick={() => handleScanSuccess(`CPCB-ASSET-${Math.floor(100000 + Math.random() * 900000)}`)}
                 className="px-2 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900 text-emerald-400 border border-emerald-800 transition"
               >
-                + New Unregistered Tag
+                + New Asset Tag
               </button>
             </div>
           </div>

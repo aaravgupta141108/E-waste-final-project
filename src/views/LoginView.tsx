@@ -333,6 +333,33 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
         {/* Right Side: Role Selector & Login Console */}
         <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl space-y-5">
+          {/* Instant 1-Click Access Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-teal-950/60 to-slate-900 border border-emerald-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl shadow-emerald-950/30">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  Instant Citizen &amp; Public Access
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                  No Password
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Click below to immediately enter the Citizen Intake Portal, Camera Scanner, and PDF Export.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onLogin('citizen', DEMO_USERS.citizen, false)}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 shrink-0"
+            >
+              <span>Explore Citizen Portal</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
           {/* Main Navigation Tabs */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
             <div>

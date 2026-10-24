@@ -37,12 +37,20 @@ import {
   MessageSquare,
   HelpCircle,
   Info,
+  Barcode,
+  Scale,
+  Printer,
+  Lock,
+  RefreshCw,
+  FileText,
   X
 } from 'lucide-react';
-import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile } from '../types';
+import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile, WipeRecord } from '../types';
 import { RATE_TABLE } from '../data/mockData';
 import { DeviceLifecycleTimeline } from '../components/DeviceLifecycleTimeline';
 import { Html5QrScannerModal } from '../components/Html5QrScannerModal';
+import { DeviceBarcodeScannerModal, ScannedDevicePayload } from '../components/DeviceBarcodeScannerModal';
+import { DevicePersonalPdfReportModal } from '../components/DevicePersonalPdfReportModal';
 
 interface CitizenPortalViewProps {
   currentUser: UserProfile;
@@ -54,6 +62,7 @@ interface CitizenPortalViewProps {
   onOpenQrModal: (deviceId?: string) => void;
   onOpenChat?: (caseId?: string) => void;
   onAdvanceDeviceStage?: (deviceId: string) => void;
+  onUpdateDeviceStatus?: (deviceId: string, newStatus: DeviceItem['status'], extraData?: Partial<DeviceItem>) => void;
   onOpenScanModal?: () => void;
   initialScannedTag?: string;
 }
@@ -68,6 +77,7 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   onOpenQrModal,
   onOpenChat,
   onAdvanceDeviceStage,
+  onUpdateDeviceStatus,
   onOpenScanModal,
   initialScannedTag
 }) => {
@@ -77,8 +87,15 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
   const [selectedDevice, setSelectedDevice] = useState<DeviceItem | null>(devices[0] || null);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [isPdfReportModalOpen, setIsPdfReportModalOpen] = useState(false);
+  const [pdfReportDevice, setPdfReportDevice] = useState<DeviceItem | null>(null);
   const [isHtml5ScannerOpen, setIsHtml5ScannerOpen] = useState(false);
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
+  const [scannedAutofillNotice, setScannedAutofillNotice] = useState<string | null>(null);
   const [showQrHowToTooltip, setShowQrHowToTooltip] = useState(false);
+  const [isSanitizing, setIsSanitizing] = useState(false);
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [liveGpsLock, setLiveGpsLock] = useState({ lat: 28.5355, lng: 77.391, accuracy: 8.5 });
 
   // Sync selectedDevice when devices change (e.g. newly registered device)
   React.useEffect(() => {
@@ -266,6 +283,167 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
 
     onRegisterDevice(newDeviceData);
     setActiveTab('my_devices');
+  };
+
+  const handleDeviceScanned = (scanned: ScannedDevicePayload) => {
+    setFormCategory(scanned.category);
+    setFormBrand(scanned.brand);
+    setFormModel(scanned.model);
+    setFormSerial(scanned.serialNumber);
+    if (scanned.imei) setFormImei(scanned.imei);
+    setFormWeight(scanned.intakeWeightKg.toString());
+    setFormCondition(scanned.condition);
+    setScannedAutofillNotice(`✓ Successfully scanned: ${scanned.brand} ${scanned.model} (${scanned.serialNumber})! Form auto-populated.`);
+    setActiveTab('instant_valuation');
+    setTimeout(() => setScannedAutofillNotice(null), 8000);
+  };
+
+  const handleRegisterWithTag = (tag: string) => {
+    const clean = tag.trim();
+    try {
+      if (clean.startsWith('{') && clean.endsWith('}')) {
+        const parsed = JSON.parse(clean);
+        if (parsed.brand) setFormBrand(parsed.brand);
+        if (parsed.model) setFormModel(parsed.model);
+        if (parsed.category) setFormCategory(parsed.category);
+        if (parsed.serialNumber || parsed.serial) setFormSerial(parsed.serialNumber || parsed.serial);
+        if (parsed.weight) setFormWeight(parsed.weight.toString());
+        setScannedAutofillNotice(`✓ Scanned QR asset tag for ${parsed.brand || 'Device'} ${parsed.model || ''}! Form pre-filled.`);
+        setActiveTab('instant_valuation');
+        setTimeout(() => setScannedAutofillNotice(null), 8000);
+        return;
+      }
+    } catch {
+      // not JSON
+    }
+
+    let serial = clean;
+    if (clean.includes('/')) {
+      const parts = clean.split('/');
+      serial = parts[parts.length - 1];
+    }
+    setFormSerial(serial);
+    setFormImei(serial);
+    setScannedAutofillNotice(`✓ Scanned QR Asset Tag / Serial [${serial}]! Form auto-populated.`);
+    setActiveTab('instant_valuation');
+    setTimeout(() => setScannedAutofillNotice(null), 8000);
+  };
+
+  const handleQuickAddDeviceFromTag = (tag: string) => {
+    const clean = tag.trim();
+    let serial = clean;
+    if (clean.includes('/')) {
+      const parts = clean.split('/');
+      serial = parts[parts.length - 1];
+    }
+
+    const isLaptop = serial.toLowerCase().includes('lap') || serial.toLowerCase().includes('mac') || serial.toLowerCase().includes('dell');
+    const isApple = serial.toLowerCase().includes('apl') || serial.toLowerCase().includes('iph') || serial.toLowerCase().includes('mac');
+    const isDell = serial.toLowerCase().includes('dl') || serial.toLowerCase().includes('dell');
+
+    const brand = isApple ? 'Apple' : isDell ? 'Dell' : 'Samsung';
+    const model = isApple ? (isLaptop ? 'MacBook Air M2 13"' : 'iPhone 14 Pro') : (isLaptop ? 'Latitude 5420' : 'Galaxy S23');
+    const category: DeviceCategory = isLaptop ? 'Laptop' : 'Smartphone';
+    const payout = isLaptop ? 18000 : 9200;
+    const co2 = isLaptop ? 120 : 58;
+
+    const newDeviceData: Partial<DeviceItem> = {
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userPhone: currentUser.mobile,
+      category,
+      brand,
+      model,
+      serialNumber: serial,
+      condition: 'working',
+      batteryPresent: true,
+      intakeWeightKg: isLaptop ? 1.45 : 0.21,
+      status: 'REGISTERED',
+      estimatedScrapValue: 750,
+      resaleValue: payout - 750,
+      payoutAmount: payout,
+      payoutMethod: 'UPI',
+      city: currentUser.city || 'Delhi',
+      state: currentUser.state || 'Delhi NCR',
+      hubLocation: 'National Hub Sector 62 / Connaught Place',
+      co2SavedKg: co2,
+      deviceAgeYears: 2,
+      greenPointsEarned: 450,
+      carbonCreditsEarnedKg: co2
+    };
+
+    onRegisterDevice(newDeviceData);
+    setScannedAutofillNotice(`✓ Successfully quick-registered ${brand} ${model} (Serial: ${serial}) via QR Camera scan!`);
+    setActiveTab('my_devices');
+    setTimeout(() => setScannedAutofillNotice(null), 8000);
+  };
+
+  // Dedicated handlers to move device data through NIST Sanitization Dock -> Payout Handover -> Live Geotagged Scale Dispatch
+  const handleSendToSanitizationDock = (deviceId: string) => {
+    if (onUpdateDeviceStatus) {
+      onUpdateDeviceStatus(deviceId, 'WIPING');
+    } else if (onAdvanceDeviceStage) {
+      onAdvanceDeviceStage(deviceId);
+    }
+  };
+
+  const handleExecuteNistWipe = (deviceId: string) => {
+    setIsSanitizing(true);
+    setTimeout(() => {
+      setIsSanitizing(false);
+      const generatedHash = `sha256-${Math.random().toString(36).substring(2)}${Date.now().toString(16)}`;
+      const wipeRecord: WipeRecord = {
+        id: `WIPE-${Date.now().toString().slice(-4)}`,
+        deviceId,
+        method: 'Cryptographic Purge & Multi-Pass Overwrite',
+        standard: 'NIST SP 800-88 Rev. 2',
+        toolName: 'BharatScrub Secure Enterprise',
+        toolVersion: 'v4.2.1-IND',
+        startTime: new Date(Date.now() - 1800000).toLocaleString(),
+        endTime: new Date().toLocaleString(),
+        status: 'Pass',
+        verificationHash: generatedHash,
+        recoverySampleTest: 'Passed (0 sectors recoverable)',
+        energyKwh: 0.048,
+        engineerName: 'Rajesh Verma (ENG-COL-104)',
+        videoProofUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
+        notes: 'NIST SP 800-88 Rev. 2 & IEEE 2883-2022 cryptographic key zeroization complete.'
+      };
+      if (onUpdateDeviceStatus) {
+        onUpdateDeviceStatus(deviceId, 'WIPE_VERIFIED', { wipeRecord });
+      } else if (onAdvanceDeviceStage) {
+        onAdvanceDeviceStage(deviceId);
+      }
+    }, 900);
+  };
+
+  const handleHandoverPayout = (device: DeviceItem) => {
+    const txnRef = `UPI/${Math.floor(100000000000 + Math.random() * 900000000000)}/HDFC`;
+    if (onUpdateDeviceStatus) {
+      onUpdateDeviceStatus(device.id, 'PAYMENT_ACKNOWLEDGED', {
+        payoutTxnRef: txnRef,
+        payoutSentAt: new Date().toLocaleString(),
+        payoutAcknowledgedAt: new Date().toLocaleString()
+      });
+    } else if (onAcknowledgePayment) {
+      onAcknowledgePayment(device.id);
+    }
+  };
+
+  const handleAuthorizeScaleDispatch = (device: DeviceItem) => {
+    setIsDispatching(true);
+    setTimeout(() => {
+      setIsDispatching(false);
+      const batchId = `BATCH-CPCB-DEL-2026-${device.id.slice(-4)}`;
+      if (onUpdateDeviceStatus) {
+        onUpdateDeviceStatus(device.id, 'READY_FOR_DISPATCH', {
+          batchId,
+          intakeWeightKg: device.intakeWeightKg || 0.25
+        });
+      } else if (onAdvanceDeviceStage) {
+        onAdvanceDeviceStage(device.id);
+      }
+    }, 800);
   };
 
   const handleSavePayment = (e: React.FormEvent) => {
@@ -598,13 +776,24 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                   Your Consignments ({devices.length})
                 </span>
-                <button
-                  onClick={() => setActiveTab('instant_valuation')}
-                  className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>New Intake</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsHtml5ScannerOpen(true)}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
+                    title="Scan serial or asset tag QR with camera to quickly add or lookup device"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Scan QR Tag</span>
+                  </button>
+                  <span className="text-slate-700">|</span>
+                  <button
+                    onClick={() => setActiveTab('instant_valuation')}
+                    className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New Intake</span>
+                  </button>
+                </div>
               </div>
 
               {devices.map((device) => {
@@ -683,9 +872,36 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
 
                     <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs font-mono">
                       <span className="text-slate-500 text-[10px]">{device.id}</span>
-                      <span className="text-emerald-400 font-bold">
-                        ₹{device.payoutAmount.toLocaleString()} ({device.payoutMethod})
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPdfReportDevice(device);
+                            setIsPdfReportModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] text-cyan-300 border border-cyan-900/60 flex items-center gap-1 transition"
+                          title="Export registered device details as a downloadable PDF report for personal record-keeping"
+                        >
+                          <FileText className="w-3 h-3 text-cyan-400" />
+                          <span>PDF Report</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenQrModal(device.id);
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] text-emerald-400 border border-emerald-900/60 flex items-center gap-1 transition"
+                          title="Print physical QR inventory asset tag"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>Asset Tag</span>
+                        </button>
+                        <span className="text-emerald-400 font-bold">
+                          ₹{device.payoutAmount.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -768,6 +984,259 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                   </div>
                 </div>
 
+                {/* NIST SP 800-88 Rev. 2 & IEEE 2883-2022 Data Sanitization Dock & Live Geotagged Scale Dispatch Hub */}
+                <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/40 rounded-2xl p-5 shadow-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                            NIST SP 800-88 Rev. 2 &amp; IEEE 2883-2022 Data Sanitization Dock
+                          </h4>
+                          <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                            ZERO-RESIDUAL DOCK
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Statutory hardware media scrubbing, buyback payout release, and live geotagged scale dispatch pipeline.
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${getStatusBadgeStyle(selectedDevice.status)}`}>
+                      Current Stage: {selectedDevice.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  {/* STAGE 1: REGISTERED or DETAILS_CONFIRMED -> Route data to NIST Sanitization Dock */}
+                  {(selectedDevice.status === 'REGISTERED' || selectedDevice.status === 'DETAILS_CONFIRMED') && (
+                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-white block">
+                            Consignment Data Logged in Central Registry
+                          </span>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Device hardware specs verified ({selectedDevice.category} • {selectedDevice.brand} {selectedDevice.model}). Ready to mount at statutory data sanitization dock.
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-bold border border-amber-800">
+                          Awaiting Sanitization Mount
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          Compliance Standard: NIST SP 800-88 Rev. 2 Purge &amp; IEEE 2883-2022
+                        </span>
+                        <button
+                          onClick={() => handleSendToSanitizationDock(selectedDevice.id)}
+                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md shadow-emerald-950/60 flex items-center gap-1.5 transition"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Send Data to NIST SP 800-88 Rev. 2 &amp; IEEE 2883-2022 Sanitization Dock</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STAGE 2: WIPING -> Live Sanitization in Progress */}
+                  {selectedDevice.status === 'WIPING' && (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/50 space-y-3 text-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className={`w-4 h-4 text-amber-400 ${isSanitizing ? 'animate-spin' : ''}`} />
+                          <span className="font-bold text-white">
+                            Active Dock: NIST SP 800-88 Rev. 2 &amp; IEEE 2883-2022 Cryptographic Erase
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-bold animate-pulse">
+                          DOCK WIPING IN PROGRESS
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 font-mono text-[11px]">
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                          <span className="text-slate-500 block text-[9px] font-sans">Mandatory Standard</span>
+                          <span className="text-white font-bold">NIST SP 800-88 Rev. 2 &amp; IEEE 2883</span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                          <span className="text-slate-500 block text-[9px] font-sans">Storage Method</span>
+                          <span className="text-cyan-300 font-bold">Cryptographic Purge &amp; Block Zeroing</span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                          <span className="text-slate-500 block text-[9px] font-sans">Forensic Recovery Test</span>
+                          <span className="text-emerald-400 font-bold">Passed (0 Sectors Recoverable)</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          Tool: BharatScrub Engine v4.2.1-IND (ISO 27040 Certified)
+                        </span>
+                        <button
+                          onClick={() => handleExecuteNistWipe(selectedDevice.id)}
+                          disabled={isSanitizing}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition flex items-center gap-2 shadow"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>{isSanitizing ? 'Zeroing Cryptographic Sectors...' : 'Execute Sanitization & Sign Off NIST Certificate'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STAGE 3: WIPE_VERIFIED -> Hand Over Payout */}
+                  {selectedDevice.status === 'WIPE_VERIFIED' && (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/50 space-y-3 text-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="font-bold text-white">
+                            Data Sanitization Complete! Ready for Payout Handover
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                          NIST WIPE VERIFIED
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 font-mono">
+                        Verification Hash: <span className="text-cyan-300">{selectedDevice.wipeRecord?.verificationHash || 'sha256-4b82190fa83c72b10023da'}</span>
+                      </p>
+
+                      <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] font-sans text-slate-400 block uppercase">Approved Buyback Payout:</span>
+                          <div className="text-xl font-black text-emerald-400 font-mono">
+                            ₹{selectedDevice.payoutAmount.toLocaleString()}
+                          </div>
+                          <span className="text-[10px] text-slate-400">Direct to UPI / IMPS Instant Rail</span>
+                        </div>
+
+                        <button
+                          onClick={() => handleHandoverPayout(selectedDevice)}
+                          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/60"
+                        >
+                          <IndianRupee className="w-4 h-4" />
+                          <span>Hand Over Payout (₹{selectedDevice.payoutAmount}) &amp; Show Live Geotagged Scale Dispatch</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STAGE 4: PAYMENT_SENT or PAYMENT_ACKNOWLEDGED -> Show the Next Live Geotagged Scale Dispatch */}
+                  {(selectedDevice.status === 'PAYMENT_SENT' || selectedDevice.status === 'PAYMENT_ACKNOWLEDGED') && (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/50 space-y-3 text-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="font-bold text-white">
+                            Payout Handed Over (₹{selectedDevice.payoutAmount.toLocaleString()}) • Next: Live Geotagged Scale Dispatch
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold">
+                          NEXT STAGE: SCALE DISPATCH
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300">
+                        Statutory CPCB requirement: Calibrated weighbridge measurement with live browser GPS coordinate verification (&lt;100m accuracy) to eliminate phantom recycling claims before consignment departs data sanitization dock.
+                      </p>
+
+                      {/* Live Scale & GPS Geotag Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 font-mono text-[11px]">
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-sans">
+                            <Scale className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Calibrated Scale Reading</span>
+                          </div>
+                          <div className="text-white font-bold text-sm">
+                            {selectedDevice.intakeWeightKg} kg
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-sans">Weighbridge Cert #WB-9912</span>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-sans">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Live Browser GPS Lock</span>
+                          </div>
+                          <div className="text-emerald-400 font-bold">
+                            {liveGpsLock.lat.toFixed(4)}°N, {liveGpsLock.lng.toFixed(4)}°E
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-sans">Accuracy ±{liveGpsLock.accuracy}m (Passed)</span>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-sans">
+                            <Truck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>CPCB Transit Manifest</span>
+                          </div>
+                          <div className="text-amber-300 font-bold truncate">
+                            BATCH-CPCB-DEL-2026-{selectedDevice.id.slice(-4)}
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-sans">E-Way Bill EWB-991204</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          Ready to move ahead of NIST SP 800-88 Rev. 2 &amp; IEEE 2883-2022 Data Sanitization Dock
+                        </span>
+
+                        <button
+                          onClick={() => handleAuthorizeScaleDispatch(selectedDevice)}
+                          disabled={isDispatching}
+                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-sky-950/60"
+                        >
+                          <MapPin className="w-4 h-4" />
+                          <span>{isDispatching ? 'Locking Coordinates & Authorizing...' : 'Authorize Live Geotagged Scale Dispatch & Move Ahead'}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STAGE 5: READY_FOR_DISPATCH or beyond -> Consignment Has Moved Ahead */}
+                  {(selectedDevice.status === 'READY_FOR_DISPATCH' ||
+                    selectedDevice.status === 'FACTORY_INSPECTION' ||
+                    selectedDevice.status === 'RECYCLED' ||
+                    selectedDevice.status === 'CERTIFIED') && (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-2.5 text-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="font-bold text-white">
+                            Consignment Data Moved Ahead of NIST SP 800-88 Rev. 2 &amp; IEEE 2883-2022 Dock
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                          DISPATCH AUTHORIZED
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300">
+                        Weighbridge log recorded ({selectedDevice.intakeWeightKg} kg) and GPS lock verified. Batch #{selectedDevice.batchId || `BATCH-CPCB-DEL-2026-${selectedDevice.id.slice(-4)}`} is in transit via green corridor electric fleet to authorized CPCB refinery for material reclamation.
+                      </p>
+
+                      <div className="pt-1 flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-cyan-300">
+                          Transit Fleet: DL-01-EV-4491 (Green Corridor EV)
+                        </span>
+                        <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-emerald-400">
+                          GPS Coordinates: {liveGpsLock.lat.toFixed(4)}°N, {liveGpsLock.lng.toFixed(4)}°E (Tracked)
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* 10-Stage Device Lifecycle Timeline with Battery Health Widget */}
                 <DeviceLifecycleTimeline
                   device={selectedDevice}
@@ -808,13 +1277,27 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     )}
                   </div>
 
-                  <button
-                    onClick={() => onOpenQrModal(selectedDevice.id)}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/70 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm hover:shadow-emerald-900/30"
-                  >
-                    <QrCode className="w-4 h-4 text-emerald-400" />
-                    <span>Physical Bin &amp; Custody QR ({selectedDevice.id})</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setPdfReportDevice(selectedDevice);
+                        setIsPdfReportModalOpen(true);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-emerald-950/40"
+                      title="Export registered device details as a downloadable PDF report formatted for personal record-keeping"
+                    >
+                      <FileText className="w-4 h-4 text-emerald-200" />
+                      <span>Export PDF Report (Personal Record)</span>
+                    </button>
+
+                    <button
+                      onClick={() => onOpenQrModal(selectedDevice.id)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-700/70 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm hover:shadow-emerald-900/30"
+                    >
+                      <QrCode className="w-4 h-4 text-emerald-400" />
+                      <span>Physical Bin &amp; Custody QR ({selectedDevice.id})</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -827,15 +1310,44 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Intake Form */}
           <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-xl">
-            <div className="border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <h3 className="text-base font-bold text-white">Instant Device Valuation &amp; Doorstep Intake</h3>
+            <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <h3 className="text-base font-bold text-white">Instant Device Valuation &amp; Doorstep Intake</h3>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Upload or photograph your device to calculate instant scrap, reuse residual value, and government EPR bonuses.
+                </p>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Upload or photograph your device to calculate instant scrap, reuse residual value, and government EPR bonuses.
-              </p>
+
+              {/* Camera Barcode / Serial Scanner Button */}
+              <button
+                type="button"
+                onClick={() => setIsBarcodeScannerOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 flex items-center gap-2 transition shrink-0"
+              >
+                <Barcode className="w-4 h-4 text-emerald-200" />
+                <span>Scan Barcode / Serial with Camera</span>
+              </button>
             </div>
+
+            {/* Scanned Autofill Notification Alert */}
+            {scannedAutofillNotice && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-200 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-medium">{scannedAutofillNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannedAutofillNotice(null)}
+                  className="text-emerald-400 hover:text-white p-1 rounded hover:bg-emerald-500/20"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleCreateDeviceWithValuation} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -925,15 +1437,27 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                     <label className="block text-xs font-semibold text-slate-300">
                       Serial Number or IMEI (Optional)
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsHtml5ScannerOpen(true)}
-                      className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold transition"
-                      title="Scan serial QR with camera for instant autofill"
-                    >
-                      <Camera className="w-3 h-3" />
-                      <span>Scan Serial QR</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsBarcodeScannerOpen(true)}
+                        className="text-[11px] text-teal-400 hover:text-teal-300 flex items-center gap-1 font-semibold transition"
+                        title="Scan serial barcode with camera"
+                      >
+                        <Barcode className="w-3 h-3" />
+                        <span>Scan Barcode</span>
+                      </button>
+                      <span className="text-slate-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsHtml5ScannerOpen(true)}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold transition"
+                        title="Scan QR tag with camera"
+                      >
+                        <Camera className="w-3 h-3" />
+                        <span>Scan QR</span>
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -1299,12 +1823,29 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
             setActiveTab('my_devices');
           }
         }}
-        onRegisterWithTag={(tag) => {
-          setFormSerial(tag);
-          setFormImei(tag);
-          setActiveTab('instant_valuation');
-        }}
+        onRegisterWithTag={handleRegisterWithTag}
+        onQuickAddDevice={handleQuickAddDeviceFromTag}
       />
+
+      {/* Device Barcode & Serial Scanner Modal (Camera Barcode / Serial OCR) */}
+      <DeviceBarcodeScannerModal
+        isOpen={isBarcodeScannerOpen}
+        onClose={() => setIsBarcodeScannerOpen(false)}
+        onDeviceScanned={handleDeviceScanned}
+      />
+
+      {/* Personal E-Waste Disposal & Buyback PDF Report Modal */}
+      {pdfReportDevice && (
+        <DevicePersonalPdfReportModal
+          isOpen={isPdfReportModalOpen}
+          onClose={() => {
+            setIsPdfReportModalOpen(false);
+            setPdfReportDevice(null);
+          }}
+          device={pdfReportDevice}
+          currentUser={currentUser}
+        />
+      )}
 
       {/* Video Proof Modal */}
       {showVideoModal && selectedDevice?.wipeRecord && (

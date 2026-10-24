@@ -253,6 +253,18 @@ export default function App() {
 
     setDevices((prev) => [newDevice, ...prev]);
 
+    // Automatically generate a unique printable QR asset tag and open printable modal for inventory tracking
+    setTargetQrDeviceId(newDevice.id);
+    setIsQrModalOpen(true);
+
+    setActivePushNotification({
+      title: '🏷️ QR Asset Tag Generated',
+      message: `Printable physical asset tag generated for ${newDevice.brand} ${newDevice.model} (${newDevice.id}). Affix to consignment box before collection.`,
+      quarter: 'CPCB Asset Tag',
+      priority: 'Routine',
+      deadline: 'Print & Label Box'
+    });
+
     // Update current user's registered device count and green points
     setCurrentUser((prev) => ({
       ...prev,
@@ -578,6 +590,7 @@ export default function App() {
                     onOpenQrModal={handleOpenQrModal}
                     onOpenChat={handleOpenChat}
                     onAdvanceDeviceStage={handleAdvanceDeviceStage}
+                    onUpdateDeviceStatus={handleUpdateDeviceStatus}
                   />
                 )}
 

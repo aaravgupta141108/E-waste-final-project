@@ -33,7 +33,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   onSelectDevice,
   targetDeviceId
 }) => {
-  const [activeMode, setActiveMode] = useState<'generate' | 'scan'>('generate');
+  const [activeMode, setActiveMode] = useState<'generate' | 'printable_tag' | 'scan'>('generate');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
     targetDeviceId || devices[0]?.id || ''
   );
@@ -128,6 +128,20 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           >
             <QrCode className="w-3.5 h-3.5" />
             <span>Digital Custody Tag &amp; Bin QR</span>
+          </button>
+          <button
+            onClick={() => setActiveMode('printable_tag')}
+            className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+              activeMode === 'printable_tag'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Printable QR Asset Tag (Physical Label)</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold font-mono">
+              Label
+            </span>
           </button>
           <button
             onClick={() => setActiveMode('scan')}
@@ -296,6 +310,133 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                     <span className="text-slate-400 text-[10px]">{casePalletId}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          ) : activeMode === 'printable_tag' ? (
+            /* Physical Inventory Printable Asset Tag Mode */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">
+                  Ready-to-print industrial adhesive label for physical equipment chassis &amp; consignment crate.
+                </span>
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/30"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Physical Tag Now</span>
+                </button>
+              </div>
+
+              {/* Physical Printable Label (White card styled for thermal/laser printers) */}
+              <div className="bg-white text-slate-950 p-6 rounded-2xl border-2 border-dashed border-slate-400 shadow-2xl max-w-lg mx-auto font-sans relative overflow-hidden print-include">
+                {/* Top Badge & CPCB Statutory Header */}
+                <div className="border-b-2 border-slate-950 pb-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono font-bold tracking-widest uppercase block text-emerald-800">
+                      GOVERNMENT OF INDIA • CPCB / MoEFCC
+                    </span>
+                    <h3 className="text-sm font-black tracking-tight text-slate-950">
+                      NATIONAL E-WASTE INVENTORY ASSET TAG
+                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-950 text-white uppercase">
+                      CLASS-9 HAZMAT
+                    </span>
+                    <div className="text-[10px] font-mono font-bold text-slate-800 mt-0.5">
+                      FORM-6 COMPLIANT
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Label Body: QR + Key Parameters */}
+                <div className="py-4 grid grid-cols-12 gap-4 items-center">
+                  {/* Left: High-Contrast QR Code */}
+                  <div className="col-span-5 flex flex-col items-center border-r-2 border-slate-200 pr-3">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+                        qrPayload
+                      )}`}
+                      alt="Physical Asset Tag QR"
+                      className="w-32 h-32 border-2 border-slate-950 p-1 rounded"
+                    />
+                    <span className="text-[10px] font-mono font-black mt-1 text-slate-950">
+                      {currentDevice.id}
+                    </span>
+                  </div>
+
+                  {/* Right: Technical Intake Specs */}
+                  <div className="col-span-7 space-y-1 text-[11px] leading-tight">
+                    <div>
+                      <span className="text-[9px] font-mono text-slate-500 uppercase block">Equipment Model</span>
+                      <strong className="text-xs font-black text-slate-950">
+                        {currentDevice.brand} {currentDevice.model}
+                      </strong>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1 pt-1 font-mono text-[10px]">
+                      <div>
+                        <span className="text-[8px] text-slate-500 uppercase block font-sans">Category</span>
+                        <span className="font-bold text-slate-900">{currentDevice.category}</span>
+                      </div>
+                      <div>
+                        <span className="text-[8px] text-slate-500 uppercase block font-sans">Scale Weight</span>
+                        <span className="font-bold text-slate-900">{currentDevice.intakeWeightKg} kg</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 font-mono text-[10px]">
+                      <span className="text-[8px] text-slate-500 uppercase block font-sans">Serial / IMEI</span>
+                      <span className="font-bold text-slate-900 truncate block">
+                        {currentDevice.imei || currentDevice.serialNumber}
+                      </span>
+                    </div>
+
+                    <div className="pt-1 grid grid-cols-2 gap-1 font-mono text-[9px] border-t border-slate-200">
+                      <div>
+                        <span className="text-[8px] text-slate-500 font-sans">Bin:</span>
+                        <span className="font-bold text-slate-900">{caseBinId}</span>
+                      </div>
+                      <div>
+                        <span className="text-[8px] text-slate-500 font-sans">Lot:</span>
+                        <span className="font-bold text-slate-900">{casePalletId}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Simulated Barcode Banner */}
+                <div className="border-t-2 border-slate-950 pt-2 text-center space-y-1">
+                  <div className="flex justify-center items-center gap-[2px] h-8 overflow-hidden bg-slate-100 p-1 rounded">
+                    {[12, 4, 8, 2, 10, 6, 14, 4, 2, 8, 12, 6, 4, 10, 8, 4, 12, 2, 6, 14, 8, 4, 2, 10, 12, 6, 8, 4, 10, 6, 14, 8, 4, 2, 12].map((w, idx) => (
+                      <span
+                        key={idx}
+                        className="bg-slate-950 inline-block h-full"
+                        style={{ width: `${(w % 4) + 1.5}px` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="text-[9px] font-mono tracking-widest font-black text-slate-950">
+                    *CPCB-{currentDevice.id}-TAG*
+                  </div>
+                </div>
+
+                {/* Tamper Warning Bottom Strip */}
+                <div className="mt-2 pt-1 border-t border-slate-300 text-[8px] font-mono text-slate-600 flex items-center justify-between">
+                  <span>SEAL: {caseSealNumber}</span>
+                  <span className="font-bold uppercase text-rose-800">TAMPERING VIOLATES EPA ACT 1986</span>
+                </div>
+              </div>
+
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs inline-flex items-center gap-2 transition"
+                >
+                  <Printer className="w-4 h-4 text-emerald-400" />
+                  <span>Print Laser / Thermal Tag (10cm x 15cm)</span>
+                </button>
               </div>
             </div>
           ) : (

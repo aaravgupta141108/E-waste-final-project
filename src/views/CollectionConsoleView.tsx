@@ -301,14 +301,15 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
     alert('NIST SP 800-88 Data Sanitization verified! Device is now ready for Payout & Dispatch.');
   };
 
-  // Submit Payout
+  // Submit Payout & transition to Live Geotagged Scale Dispatch
   const handleSendPayment = () => {
     if (!selectedDevice) return;
     onUpdateDeviceStatus(selectedDevice.id, 'PAYMENT_SENT', {
       payoutTxnRef: txnRefInput,
       payoutSentAt: new Date().toLocaleString()
     });
-    alert(`₹${selectedDevice.payoutAmount} remitted to citizen via ${payoutMethod}! Awaiting user confirmation.`);
+    alert(`₹${selectedDevice.payoutAmount} remitted to citizen via ${payoutMethod}! Switching to Live Geotagged Scale Dispatch stage.`);
+    setActiveSubTab('dispatch_geo');
   };
 
   // Submit Geotagged scale evidence
@@ -515,7 +516,7 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           }`}
         >
           <Lock className="w-4 h-4" />
-          <span>NIST Data Wiping Station</span>
+          <span>NIST SP 800-88 &amp; IEEE 2883 Dock</span>
         </button>
         <button
           role="tab"
@@ -1019,7 +1020,7 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
               >
                 {devices
-                  .filter((d) => d.status === 'PAYMENT_ACKNOWLEDGED' || d.status === 'READY_FOR_DISPATCH')
+                  .filter((d) => d.status === 'PAYMENT_SENT' || d.status === 'PAYMENT_ACKNOWLEDGED' || d.status === 'READY_FOR_DISPATCH')
                   .map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.id} - {d.brand} {d.model} ({d.status})
