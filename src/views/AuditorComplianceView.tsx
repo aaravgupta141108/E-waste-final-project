@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
   Building2,
@@ -15,14 +15,45 @@ import {
   Scale,
   Sparkles,
   ExternalLink,
-  Bell
+  Bell,
+  Copy,
+  CheckCheck,
+  Hash,
+  ArrowDownToLine,
+  Filter,
+  Layers,
+  Database,
+  ArrowRight,
+  Smartphone
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { AUDIT_LOGS, CPCB_RECYCLERS, NATIONAL_STATS } from '../data/mockData';
 import { ComplianceDeadlineReminder, AuditLogEntry, DeviceItem, UserProfile } from '../types';
 import { ComplianceCalendar } from '../components/ComplianceCalendar';
 import { ComplianceHistoryLog } from '../components/ComplianceHistoryLog';
-import { ComplianceHeatmap } from '../components/ComplianceHeatmap';
+import { ComplianceHeatmap, STATE_COMPLIANCE_DATA, getGradientScaleColor, StateComplianceData } from '../components/ComplianceHeatmap';
+import { AuditInsightsCard } from '../components/AuditInsightsCard';
+import { StateComplianceDetailModal } from '../components/StateComplianceDetailModal';
+import { AnnualComplianceReportModal } from '../components/AnnualComplianceReportModal';
+import { ImeiDeviceLookupCard } from '../components/ImeiDeviceLookupCard';
+
+export interface DeviceLifecycleEvent {
+  id: string;
+  timestamp: string;
+  deviceId: string;
+  category: string;
+  makeModel: string;
+  actionCode: string;
+  actionLabel: string;
+  actionCategory: 'intake' | 'ceir' | 'wipe' | 'scale' | 'payout' | 'intervention' | 'audit';
+  actorName: string;
+  actorRole: string;
+  stationNode: string;
+  cryptographicHash: string;
+  blockAnchor: string;
+  status: 'VERIFIED IMMUTABLE' | 'BLOCK ANCHORED' | 'SEALED';
+  details: string;
+}
 
 interface AuditorComplianceViewProps {
   currentUser: UserProfile;
@@ -43,9 +74,261 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   onDeleteReminder = () => {},
   onTriggerPushNotification = () => {}
 }) => {
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'history' | 'calendar' | 'cpcb_targets' | 'heatmap' | 'audit_trail' | 'recycler_directory'>('scorecard');
+  const [activeTab, setActiveTab] = useState<'scorecard' | 'imei_terminal' | 'compliance_logs' | 'history' | 'calendar' | 'cpcb_targets' | 'heatmap' | 'audit_trail' | 'recycler_directory'>('scorecard');
   const [searchLog, setSearchLog] = useState('');
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [showAnnualReportModal, setShowAnnualReportModal] = useState(false);
+  const [selectedHeatmapState, setSelectedHeatmapState] = useState<StateComplianceData | null>(null);
+  const [complianceSearch, setComplianceSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState<'all' | 'intake' | 'ceir' | 'wipe' | 'scale' | 'payout' | 'intervention' | 'audit'>('all');
+  const [copiedHash, setCopiedHash] = useState<string | null>(null);
+
+  // Synthesize complete, immutable device lifecycle events across the registry
+  const lifecycleEvents: DeviceLifecycleEvent[] = useMemo(() => {
+    const list: DeviceLifecycleEvent[] = [];
+
+    // 1. Events derived from devices
+    devices.forEach((device) => {
+      const cleanId = device.id.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+      // Intake Registration Event
+      list.push({
+        id: `EVT-INTAKE-${device.id}`,
+        timestamp: device.registeredAt || '2026-10-15 09:30:00 IST',
+        deviceId: device.id,
+        category: device.category,
+        makeModel: `${device.brand} ${device.model}`,
+        actionCode: 'STATUTORY_INTAKE_DECLARED',
+        actionLabel: 'Physical Intake & Verification',
+        actionCategory: 'intake',
+        actorName: device.userName || 'Citizen Consignor',
+        actorRole: 'citizen',
+        stationNode: device.hubLocation || 'CPCB Certified Hub #04 - Connaught Place',
+        cryptographicHash: `sha256:7f${cleanId}b8109d71fae881023c94812a`,
+        blockAnchor: `BLK #${51200 + (cleanId.charCodeAt(cleanId.length - 1) || 9) * 17}`,
+        status: 'VERIFIED IMMUTABLE',
+        details: `Consignment intake recorded at ${device.intakeWeightKg || 0.25} kg. Serial: ${device.serialNumber || 'N/A'}. IMEI: ${device.imei || 'N/A'}. Payout benchmark: ₹${device.payoutAmount || device.estimatedScrapValue || 800}.`
+      });
+
+      // Sanchar Saathi CEIR Verification
+      if (device.category === 'Smartphone' || device.imei) {
+        list.push({
+          id: `EVT-CEIR-${device.id}`,
+          timestamp: device.registeredAt ? `${device.registeredAt.split(' ')[0]} 10:12:00 IST` : '2026-10-15 10:12:00 IST',
+          deviceId: device.id,
+          category: device.category,
+          makeModel: `${device.brand} ${device.model}`,
+          actionCode: 'SANCHAR_SAATHI_CEIR_CLEARED',
+          actionLabel: 'Sanchar Saathi DoT Query',
+          actionCategory: 'ceir',
+          actorName: 'DoT Central Identity Engine',
+          actorRole: 'cpcb_auditor',
+          stationNode: 'National CEIR Equipment Gateway',
+          cryptographicHash: `sha256:3a${cleanId}90412849cf884f1a90c428`,
+          blockAnchor: `BLK #${51225 + (cleanId.charCodeAt(cleanId.length - 1) || 9) * 17}`,
+          status: 'VERIFIED IMMUTABLE',
+          details: `IMEI ${device.imei || '864920048192837'} validated against national lost/stolen database. Status: CLEAN & GENUINE. Approved for EPR compliance cascade.`
+        });
+      }
+
+      // NIST SP 800-88 / IEEE 2883 Data Wipe Event
+      if (device.wipeRecord) {
+        list.push({
+          id: `EVT-WIPE-${device.id}`,
+          timestamp: device.wipeRecord.endTime || '2026-10-16 14:28:00 IST',
+          deviceId: device.id,
+          category: device.category,
+          makeModel: `${device.brand} ${device.model}`,
+          actionCode: 'NIST_SP_800_88_DATA_PURGED',
+          actionLabel: 'NIST / IEEE Data Sanitization',
+          actionCategory: 'wipe',
+          actorName: device.wipeRecord.engineerName || 'Rajesh Verma (ENG-COL-104)',
+          actorRole: 'collection_engineer',
+          stationNode: device.hubLocation || 'CPCB Sanitization Dock Node',
+          cryptographicHash: device.wipeRecord.verificationHash.startsWith('sha256:')
+            ? device.wipeRecord.verificationHash
+            : `sha256:${device.wipeRecord.verificationHash}`,
+          blockAnchor: `BLK #${51260 + (cleanId.charCodeAt(cleanId.length - 1) || 9) * 17}`,
+          status: 'VERIFIED IMMUTABLE',
+          details: `${device.wipeRecord.standard} • ${device.wipeRecord.method}. Recovery sample check: ${device.wipeRecord.recoverySampleTest}. Energy consumed: ${device.wipeRecord.energyKwh} kWh.`
+        });
+      }
+
+      // Calibrated Scale Dispatch Event
+      list.push({
+        id: `EVT-SCALE-${device.id}`,
+        timestamp: device.updatedAt || '2026-10-17 11:45:00 IST',
+        deviceId: device.id,
+        category: device.category,
+        makeModel: `${device.brand} ${device.model}`,
+        actionCode: 'CALIBRATED_SCALE_DISPATCH_SEALED',
+        actionLabel: 'Calibrated Scale Transit Dispatch',
+        actionCategory: 'scale',
+        actorName: 'Logistics Officer (ENG-COL-104)',
+        actorRole: 'collection_engineer',
+        stationNode: device.hubLocation || 'Hub Logistics Weighbridge',
+        cryptographicHash: `sha256:8b${cleanId}c1209ea90c42817bf44d82`,
+        blockAnchor: `BLK #${51295 + (cleanId.charCodeAt(cleanId.length - 1) || 9) * 17}`,
+        status: 'SEALED',
+        details: `Digital scale gross weight calibrated at ${device.intakeWeightKg || 0.25} kg. Tamper-evident Seal: SEAL-CPCB-${device.id.slice(-4)}-2026. Batch: ${device.batchId || 'BATCH-DEL-2026-W43'}.`
+      });
+
+      // DBT Payout Event
+      if (device.payoutAmount || device.payoutSentAt) {
+        list.push({
+          id: `EVT-PAYOUT-${device.id}`,
+          timestamp: device.payoutSentAt || '2026-10-18 11:20:00 IST',
+          deviceId: device.id,
+          category: device.category,
+          makeModel: `${device.brand} ${device.model}`,
+          actionCode: 'DIRECT_BENEFIT_PAYOUT_SETTLED',
+          actionLabel: 'Direct Benefit Transfer (DBT)',
+          actionCategory: 'payout',
+          actorName: 'Escrow Settlement Gateway',
+          actorRole: 'admin',
+          stationNode: 'NPCI UPI / RTGS National Gateway',
+          cryptographicHash: `sha256:1a${cleanId}e049184b227777d4dd1fc`,
+          blockAnchor: `BLK #${51320 + (cleanId.charCodeAt(cleanId.length - 1) || 9) * 17}`,
+          status: 'VERIFIED IMMUTABLE',
+          details: `₹${(device.payoutAmount || 800).toLocaleString()} disbursed via ${device.payoutMethod || 'UPI'}. Reference: ${device.payoutTxnRef || 'UPI/329482910481/HDFC'}. Citizen acknowledged.`
+        });
+      }
+
+      // Factory Interventions (Hazard Extraction, Dismantling)
+      if (device.interventions && device.interventions.length > 0) {
+        device.interventions.forEach((intv, idx) => {
+          list.push({
+            id: `EVT-INTV-${device.id}-${idx}`,
+            timestamp: intv.timestamp,
+            deviceId: device.id,
+            category: device.category,
+            makeModel: `${device.brand} ${device.model}`,
+            actionCode: 'HAZMAT_EXTRACTION_LOGGED',
+            actionLabel: 'Hazard Isolation & Demanufacturing',
+            actionCategory: 'intervention',
+            actorName: intv.operatorName,
+            actorRole: 'factory_engineer',
+            stationNode: intv.station,
+            cryptographicHash: `sha256:5c${cleanId}idx${idx}c72b81094ea120349b`,
+            blockAnchor: `BLK #${51350 + idx * 8}`,
+            status: 'VERIFIED IMMUTABLE',
+            details: `${intv.actionType}: ${intv.notes} (Hazard: ${intv.hazardType || 'Isolated safe'})`
+          });
+        });
+      }
+    });
+
+    // 2. Append general system AUDIT_LOGS
+    AUDIT_LOGS.forEach((log) => {
+      list.push({
+        id: log.id,
+        timestamp: log.timestamp,
+        deviceId: log.entityId.startsWith('BHW') ? log.entityId : 'SYSTEM-NODE',
+        category: 'System Regulatory Event',
+        makeModel: log.entityType,
+        actionCode: log.action,
+        actionLabel: log.action.replace(/_/g, ' '),
+        actionCategory: 'audit',
+        actorName: log.actorName,
+        actorRole: log.actorRole,
+        stationNode: log.ipAddress,
+        cryptographicHash: log.tamperProofHash.startsWith('sha256:')
+          ? log.tamperProofHash
+          : `sha256:${log.tamperProofHash}`,
+        blockAnchor: `BLK #${49900 + (parseInt(log.id.replace(/\D/g, ''), 10) % 1000 || 120)}`,
+        status: 'BLOCK ANCHORED',
+        details: log.details
+      });
+    });
+
+    // Sort descending by timestamp / ID
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [devices]);
+
+  // Filtered compliance logs for the tab
+  const filteredComplianceLogs = useMemo(() => {
+    return lifecycleEvents.filter((item) => {
+      const matchesStage = stageFilter === 'all' || item.actionCategory === stageFilter;
+      const q = complianceSearch.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        item.deviceId.toLowerCase().includes(q) ||
+        item.makeModel.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
+        item.actionCode.toLowerCase().includes(q) ||
+        item.actionLabel.toLowerCase().includes(q) ||
+        item.actorName.toLowerCase().includes(q) ||
+        item.stationNode.toLowerCase().includes(q) ||
+        item.cryptographicHash.toLowerCase().includes(q) ||
+        item.details.toLowerCase().includes(q);
+      return matchesStage && matchesSearch;
+    });
+  }, [lifecycleEvents, complianceSearch, stageFilter]);
+
+  // Trigger secure CSV download of the complete device lifecycle audit history
+  const handleExportAllAuditLogs = () => {
+    const headers = [
+      'Log Event ID',
+      'Timestamp (IST)',
+      'Action Code',
+      'Action Label',
+      'Stage Category',
+      'Target Device ID',
+      'Device Category',
+      'Make and Model',
+      'Actor Name',
+      'Actor Role',
+      'Station / Network Node',
+      'Tamper-Proof Cryptographic Hash (SHA-256)',
+      'Block Anchor Height',
+      'Ledger Status',
+      'Regulatory Audit Narrative'
+    ];
+
+    const escapeCsv = (str: string | number | undefined | null) => {
+      if (str === undefined || str === null) return '""';
+      const s = String(str).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const rows = lifecycleEvents.map((ev) => [
+      escapeCsv(ev.id),
+      escapeCsv(ev.timestamp),
+      escapeCsv(ev.actionCode),
+      escapeCsv(ev.actionLabel),
+      escapeCsv(ev.actionCategory),
+      escapeCsv(ev.deviceId),
+      escapeCsv(ev.category),
+      escapeCsv(ev.makeModel),
+      escapeCsv(ev.actorName),
+      escapeCsv(ev.actorRole),
+      escapeCsv(ev.stationNode),
+      escapeCsv(ev.cryptographicHash),
+      escapeCsv(ev.blockAnchor),
+      escapeCsv(ev.status),
+      escapeCsv(ev.details)
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `CPCB_Device_Lifecycle_Compliance_Logs_${new Date().toISOString().split('T')[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyHash = (hash: string) => {
+    navigator.clipboard?.writeText(hash);
+    setCopiedHash(hash);
+    setTimeout(() => setCopiedHash(null), 2000);
+  };
 
   // CPCB Quarterly Targets vs Actuals
   const quarterlyComplianceData = [
@@ -76,17 +359,28 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             Regulatory Compliance, Targets & Chain of Custody Audit
           </h2>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Statutory oversight under E-Waste (Management) Rules 2022 & Amendment G.S.R. 699(E). Automated verification of EPR obligations and tamper-proof audit trails.
+            Statutory oversight under E-Waste (Management) Rules 2022 & Amendment G.S.R. 699(E). Automated verification of EPR obligations, immutable lifecycle logs, and tamper-proof SHA-256 cryptographic ledgers.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowSubmissionModal(true)}
-          className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/20 flex items-center gap-2"
-        >
-          <FileText className="w-4 h-4" />
-          <span>Generate CPCB Form-3 Audit Filing PDF</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            onClick={handleExportAllAuditLogs}
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 hover:text-white border border-slate-700 transition flex items-center gap-2 shadow"
+            title="Download full tamper-proof CSV of all device lifecycle events and audit trails"
+          >
+            <Download className="w-4 h-4 text-purple-400" />
+            <span>Export All Audit Logs</span>
+          </button>
+
+          <button
+            onClick={() => setShowSubmissionModal(true)}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/20 flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Generate CPCB Form-3 Audit Filing PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Sub Tabs */}
@@ -102,6 +396,23 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           <ShieldCheck className="w-4 h-4" />
           <span>Auditor Scorecard & Flags</span>
         </button>
+
+        {/* Primary New Compliance Logs Tab */}
+        <button
+          onClick={() => setActiveTab('compliance_logs')}
+          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+            activeTab === 'compliance_logs'
+              ? 'border-purple-500 text-purple-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Lock className="w-4 h-4" />
+          <span>Compliance Logs</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold font-mono">
+            {lifecycleEvents.length} Events
+          </span>
+        </button>
+
         <button
           onClick={() => setActiveTab('history')}
           className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
@@ -163,8 +474,8 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Lock className="w-4 h-4" />
-          <span>Immutable Audit Log ({AUDIT_LOGS.length})</span>
+          <Database className="w-4 h-4" />
+          <span>Legacy Audit Trail ({AUDIT_LOGS.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('recycler_directory')}
@@ -211,6 +522,110 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             </div>
           </div>
 
+          {/* Audit Insights Card powered by mock analytic model */}
+          <AuditInsightsCard
+            devices={devices}
+            onFilterFlaggedDevices={() => {
+              const el = document.getElementById('quarantine-queue-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+
+          {/* Regional Compliance Heatmap & Adherence Overview */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-base font-bold text-white">
+                    Regional E-Waste Collection &amp; Statutory Adherence Heatmap
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-bold">
+                    CPCB RULE 13(1)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Visual gradient scale tracking state collection quotas, regulatory filings, and weight verification compliance across India.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('heatmap')}
+                className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              >
+                <span>Full Interactive Heatmap Matrix</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Gradient Scale Visualization */}
+            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-300">Continuous Performance &amp; Adherence Gradient Scale</span>
+                <span className="text-[10px] font-mono text-slate-400">Target Range: 0% to 110%+</span>
+              </div>
+              <div
+                className="h-5 w-full rounded-lg overflow-hidden shadow-inner border border-slate-700/60 relative"
+                style={{
+                  background: 'linear-gradient(to right, #e11d48 0%, #f97316 25%, #f59e0b 50%, #06b6d4 75%, #10b981 100%)'
+                }}
+              >
+                <div className="absolute inset-0 flex justify-between px-2 text-[9px] font-mono font-bold text-white drop-shadow items-center select-none">
+                  <span>&lt;70% Critical Shortfall</span>
+                  <span>70-79% Severe</span>
+                  <span>80-89% Warning</span>
+                  <span>90-94% Near</span>
+                  <span>≥95%+ Surplus Compliant</span>
+                </div>
+              </div>
+            </div>
+
+            {/* State Performance Cards Grid (Clickable to open Regional Risk Dossier Modal) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>State Attainment Cards:</span>
+                <span className="text-purple-400 font-mono flex items-center gap-1">
+                  Click any state card to open detailed performance &amp; risk modal ➔
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                {STATE_COMPLIANCE_DATA.slice(0, 12).map((d) => {
+                  const color = getGradientScaleColor(d.collectionPerformancePct);
+                  return (
+                    <button
+                      key={d.state}
+                      onClick={() => setSelectedHeatmapState(d)}
+                      className="p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 relative overflow-hidden text-left cursor-pointer transition hover:scale-[1.02] group"
+                      title={`Click to open ${d.state} detailed collection metrics and category risk dossier`}
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-1.5" style={{ backgroundColor: color }} />
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs font-bold text-white block truncate group-hover:text-purple-300" title={d.state}>
+                          {d.state}
+                        </span>
+                        <ArrowRight className="w-3 h-3 text-slate-500 group-hover:text-purple-400 shrink-0 opacity-60 group-hover:opacity-100" />
+                      </div>
+                      <span className="text-[10px] text-slate-400 block font-mono">Zone: {d.zone}</span>
+                      <div className="mt-1 flex items-baseline justify-between">
+                        <span className="text-base font-bold font-mono" style={{ color }}>
+                          {d.collectionPerformancePct.toFixed(1)}%
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-400">Attained</span>
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span>Adherence:</span>
+                        <span className="font-bold text-slate-300">{d.regulatoryAdherenceScore.toFixed(0)}%</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Sanchar Saathi CEIR & Device IMEI Verification Terminal */}
+          <ImeiDeviceLookupCard devices={devices} />
+
           {/* Statutory Filing Countdown & Push Reminder Banner */}
           <div className="p-4 rounded-xl bg-purple-950/40 border border-purple-600/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -251,7 +666,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           </div>
 
           {/* Flagged Devices Queue */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div id="quarantine-queue-section" className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -306,6 +721,256 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                     </div>
                   </div>
                 ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Compliance Logs (Searchable, Immutable Lifecycle Events with Cryptographic Hashes) */}
+      {activeTab === 'compliance_logs' && (
+        <div className="space-y-6">
+          {/* Top Metric Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-xs">
+                <span>Immutable Events</span>
+                <Lock className="w-3.5 h-3.5 text-purple-400" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">{lifecycleEvents.length}</div>
+              <div className="text-[10px] text-purple-400">Section 15 MoEFCC Compliant</div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-xs">
+                <span>Cryptographic Proof</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="text-xl font-bold text-emerald-400 font-mono">100% Validated</div>
+              <div className="text-[10px] text-slate-400">SHA-256 Merkle Block Root</div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-xs">
+                <span>Assets in Custody</span>
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">{devices.length} Units</div>
+              <div className="text-[10px] text-cyan-400">Complete Lifecycle Coverage</div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+              <div className="flex items-center justify-between text-slate-400 text-xs">
+                <span>Tampering Flags</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">0 Incidents</div>
+              <div className="text-[10px] text-emerald-400">Unbroken Chain of Custody</div>
+            </div>
+          </div>
+
+          {/* Search, Filter & Action Bar */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-purple-400" />
+                  <span>Statutory Device Lifecycle Compliance Ledger</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Searchable, tamper-proof record of every milestone: CEIR checks, NIST data scrubs, calibrated scale weights, and payouts.
+                </p>
+              </div>
+
+              {/* Export All Audit Logs Button */}
+              <button
+                onClick={handleExportAllAuditLogs}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-md shadow-purple-600/20 flex items-center gap-2 shrink-0"
+                title="Download entire device lifecycle history as CSV for offline auditing"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export All Audit Logs (CSV)</span>
+              </button>
+            </div>
+
+            {/* Filter pills & Search input */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-2 border-t border-slate-800">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                {(
+                  [
+                    { key: 'all', label: 'All Lifecycle Events' },
+                    { key: 'intake', label: 'Intake Registration' },
+                    { key: 'ceir', label: 'Sanchar Saathi' },
+                    { key: 'wipe', label: 'NIST/IEEE Purge' },
+                    { key: 'scale', label: 'Scale Dispatches' },
+                    { key: 'payout', label: 'DBT Payouts' },
+                    { key: 'intervention', label: 'Hazmat Extraction' },
+                    { key: 'audit', label: 'System Audits' }
+                  ] as const
+                ).map((st) => (
+                  <button
+                    key={st.key}
+                    onClick={() => setStageFilter(st.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 ${
+                      stageFilter === st.key
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Field */}
+              <div className="relative min-w-[260px] lg:w-72">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={complianceSearch}
+                  onChange={(e) => setComplianceSearch(e.target.value)}
+                  placeholder="Filter by device, serial, hash, actor..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                />
+                {complianceSearch && (
+                  <button
+                    onClick={() => setComplianceSearch('')}
+                    className="absolute right-2.5 top-2.5 text-slate-500 hover:text-white text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Immutable Ledger Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="px-5 py-3.5 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                <span>Verified Audit Logs & Device Milestones</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-500/20 text-purple-300 font-bold">
+                  {filteredComplianceLogs.length} Records
+                </span>
+              </span>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                Cryptographically anchored on CPCB Parivesh Gateway
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="p-3.5">Timestamp (IST) &amp; Block</th>
+                    <th className="p-3.5">Device / Make</th>
+                    <th className="p-3.5">Event Milestone</th>
+                    <th className="p-3.5">Actor &amp; Station Node</th>
+                    <th className="p-3.5">Cryptographic Hash (SHA-256)</th>
+                    <th className="p-3.5">Details &amp; Evidence</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                  {filteredComplianceLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-sans">
+                        No compliance events matched your query. Try clearing the filter or search term.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredComplianceLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-800/40 transition">
+                        <td className="p-3.5 align-top whitespace-nowrap">
+                          <span className="text-slate-300 font-semibold block text-[11px]">
+                            {log.timestamp}
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 mt-1 inline-block">
+                            {log.blockAnchor}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 align-top font-sans">
+                          <span className="font-bold text-white block text-xs">
+                            {log.makeModel}
+                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-mono text-cyan-400 font-semibold">
+                              {log.deviceId}
+                            </span>
+                            <span className="text-slate-500">•</span>
+                            <span className="text-[10px] text-slate-400">{log.category}</span>
+                          </div>
+                        </td>
+
+                        <td className="p-3.5 align-top">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                              log.actionCategory === 'wipe'
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : log.actionCategory === 'ceir'
+                                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                                : log.actionCategory === 'scale'
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                : log.actionCategory === 'payout'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : log.actionCategory === 'intervention'
+                                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                            }`}
+                          >
+                            <ShieldCheck className="w-3 h-3" />
+                            <span>{log.actionCode}</span>
+                          </span>
+                          <span className="block font-sans text-[11px] text-slate-300 font-medium mt-1">
+                            {log.actionLabel}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 align-top font-sans">
+                          <span className="font-bold text-white block text-xs">
+                            {log.actorName}
+                          </span>
+                          <span className="text-[10px] text-purple-400 block uppercase font-mono">
+                            {log.actorRole}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5 max-w-[180px] truncate" title={log.stationNode}>
+                            {log.stationNode}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 align-top">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="text-[10px] text-cyan-400 font-mono truncate max-w-[150px] inline-block"
+                              title={log.cryptographicHash}
+                            >
+                              {log.cryptographicHash.slice(0, 18)}...
+                            </span>
+                            <button
+                              onClick={() => handleCopyHash(log.cryptographicHash)}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                              title="Copy full cryptographic SHA-256 hash"
+                            >
+                              {copiedHash === log.cryptographicHash ? (
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                          <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 mt-1 font-bold">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>{log.status}</span>
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 align-top font-sans text-slate-300 text-xs max-w-xs leading-relaxed">
+                          {log.details}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -384,9 +1049,18 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         </div>
       )}
 
+      {/* Tab: Sanchar Saathi CEIR & Device IMEI Terminal */}
+      {activeTab === 'imei_terminal' && (
+        <div className="space-y-6">
+          <ImeiDeviceLookupCard devices={devices} />
+        </div>
+      )}
+
       {/* Tab: Regional E-Waste Compliance Heatmap & District Matrix */}
       {activeTab === 'heatmap' && (
-        <ComplianceHeatmap />
+        <ComplianceHeatmap
+          onSelectStateModal={(state) => setSelectedHeatmapState(state)}
+        />
       )}
 
       {/* Tab 3: Immutable Audit Log */}
@@ -536,6 +1210,23 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* State Detailed Metrics & Risk Dossier Modal */}
+      {selectedHeatmapState && (
+        <StateComplianceDetailModal
+          stateData={selectedHeatmapState}
+          onClose={() => setSelectedHeatmapState(null)}
+        />
+      )}
+
+      {/* Download / Print Annual Report Modal */}
+      {showAnnualReportModal && (
+        <AnnualComplianceReportModal
+          currentUser={currentUser}
+          devices={devices}
+          onClose={() => setShowAnnualReportModal(false)}
+        />
       )}
     </div>
   );

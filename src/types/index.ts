@@ -237,6 +237,8 @@ export interface FleetTruck {
   loadPercentage: number;
   capacityKg: number;
   currentLoadKg: number;
+  loadWeightKg?: number;
+  isGeofenced?: boolean;
   status: 'In Transit' | 'At Collection Point' | 'Unloading at Recycler' | 'Maintenance Required';
   engineHours: number;
   tirePressurePsi: number; // optimal ~32-35

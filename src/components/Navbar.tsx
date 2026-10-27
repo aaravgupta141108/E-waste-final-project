@@ -373,7 +373,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Audit Mode Toggle */}
             <button
               onClick={onToggleTheme}
-              aria-label="Toggle High-Contrast Statutory Audit Mode"
+              aria-label={theme === 'compliance-light' ? 'Switch to Dark Ops Mode' : 'Switch to Daylight Audit Mode'}
+              title={theme === 'compliance-light' ? 'Switch to Dark Ops Mode' : 'Switch to High-Contrast Daylight Audit Mode'}
               className={`h-7 flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-semibold transition border focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:outline-none ${
                 theme === 'compliance-light'
                   ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-sm'
@@ -383,12 +384,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               {theme === 'compliance-light' ? (
                 <>
                   <Sun className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span className="hidden sm:inline text-[11px] font-bold text-amber-900">Audit Mode</span>
+                  <span className="hidden sm:inline text-[11px] font-bold text-amber-950">Daylight Audit</span>
                 </>
               ) : (
                 <>
                   <Moon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="hidden sm:inline text-[11px] text-slate-300">Audit Mode</span>
+                  <span className="hidden sm:inline text-[11px] text-slate-300">Dark Ops</span>
                 </>
               )}
             </button>

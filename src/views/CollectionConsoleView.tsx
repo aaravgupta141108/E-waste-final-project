@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   HardHat,
   Search,
@@ -28,7 +28,16 @@ import {
   PlusCircle,
   CheckCheck,
   Trash2,
-  X
+  X,
+  QrCode,
+  Download,
+  FileDown,
+  Printer,
+  Copy,
+  FileText,
+  Table,
+  CheckSquare,
+  FileUp
 } from 'lucide-react';
 import { DeviceCategory, DeviceCondition, DeviceItem, UserProfile, WipeRecord } from '../types';
 import {
@@ -38,22 +47,83 @@ import {
   deleteOfflineDeviceLog,
   OfflineDeviceRecord
 } from '../utils/offlineDb';
+import { generateValidImei } from '../utils/imeiUtils';
 
 interface CollectionConsoleViewProps {
   devices: DeviceItem[];
   currentUser: UserProfile;
   onUpdateDeviceStatus: (deviceId: string, newStatus: DeviceItem['status'], extraData?: Partial<DeviceItem>) => void;
   onBulkImportDevices: (imported: Partial<DeviceItem>[]) => void;
+  onOpenQrModal?: (deviceId?: string) => void;
 }
 
 export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
   devices,
   currentUser,
   onUpdateDeviceStatus,
-  onBulkImportDevices
+  onBulkImportDevices,
+  onOpenQrModal
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'intake' | 'cv_sorter' | 'wipe_station' | 'dispatch_geo' | 'bulk_import' | 'field_offline'>('intake');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(devices[0]?.id || '');
+
+  // Tracking QR modal state
+  const [trackingQrDevice, setTrackingQrDevice] = useState<DeviceItem | null>(null);
+  const [copiedLabelText, setCopiedLabelText] = useState(false);
+
+  // Bulk Data Intake mode: 'csv_upload' | 'batch_form' | 'csv_text'
+  const [bulkMode, setBulkMode] = useState<'csv_upload' | 'batch_form' | 'csv_text'>('csv_upload');
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [parsedUploadedRows, setParsedUploadedRows] = useState<Partial<DeviceItem>[]>([]);
+  const [csvUploadError, setCsvUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Dynamic Batch Form Entry state
+  const [batchFormRows, setBatchFormRows] = useState<Array<{
+    id: string;
+    category: DeviceCategory;
+    brand: string;
+    model: string;
+    serialNumber: string;
+    condition: DeviceCondition;
+    weight: string;
+    consignor: string;
+    payout: string;
+  }>>([
+    {
+      id: 'row-1',
+      category: 'Smartphone',
+      brand: 'Samsung',
+      model: 'Galaxy A52 Enterprise',
+      serialNumber: `SM-A52-${Date.now().toString().slice(-4)}`,
+      condition: 'working',
+      weight: '0.19',
+      consignor: 'Apollo Tech IT Asset Disposal',
+      payout: '3200'
+    },
+    {
+      id: 'row-2',
+      category: 'Laptop',
+      brand: 'Lenovo',
+      model: 'ThinkPad T480 Core i5',
+      serialNumber: `LN-T480-${Date.now().toString().slice(-4)}`,
+      condition: 'working',
+      weight: '1.58',
+      consignor: 'Infosys FinTech Campus',
+      payout: '6800'
+    },
+    {
+      id: 'row-3',
+      category: 'PCB & Component Board',
+      brand: 'Intel',
+      model: 'Xeon Server Mainboard',
+      serialNumber: `INT-MB-${Date.now().toString().slice(-4)}`,
+      condition: 'not_booting',
+      weight: '2.10',
+      consignor: 'NIC Data Center',
+      payout: '1200'
+    }
+  ]);
 
   // Offline Field Intake & IndexedDB Queue State
   const [pendingOfflineLogs, setPendingOfflineLogs] = useState<OfflineDeviceRecord[]>([]);
@@ -336,8 +406,244 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
     alert(`Device assigned to outgoing transit lot ${dispatchBatchId} for CPCB authorized factory demanufacturing!`);
   };
 
+  // Open Tracking QR generator for an item
+  const handleGenerateTrackingQr = (device: DeviceItem) => {
+    setSelectedDeviceId(device.id);
+    setTrackingQrDevice(device);
+  };
+
+  // Export Manifest: generates and downloads CSV containing all currently registered device batch details
+  const handleExportManifest = () => {
+    const headers = [
+      'Consignment ID',
+      'Category',
+      'Brand',
+      'Model',
+      'Serial Number',
+      'IMEI / Cellular TAC',
+      'Condition Grade',
+      'Digital Scale Weight (kg)',
+      'Consignor Name',
+      'Consignor Phone',
+      'Hub Location',
+      'Processing Status',
+      'Batch Transit ID',
+      'Payout Amount (INR)',
+      'Payout Method',
+      'Security Seal Number',
+      'Registration Timestamp (IST)'
+    ];
+
+    const escapeCsv = (val: any) => {
+      if (val === undefined || val === null) return '""';
+      return `"${String(val).replace(/"/g, '""')}"`;
+    };
+
+    const rows = devices.map((d) => [
+      escapeCsv(d.id),
+      escapeCsv(d.category),
+      escapeCsv(d.brand),
+      escapeCsv(d.model),
+      escapeCsv(d.serialNumber || 'N/A'),
+      escapeCsv(d.imei || 'N/A'),
+      escapeCsv(d.condition),
+      escapeCsv(d.intakeWeightKg || 0.25),
+      escapeCsv(d.userName || 'Consignor'),
+      escapeCsv(d.userPhone || 'N/A'),
+      escapeCsv(d.hubLocation || currentUser.organization || 'Collection Station'),
+      escapeCsv(d.status),
+      escapeCsv(d.batchId || 'BATCH-DEL-2026-W43'),
+      escapeCsv(d.payoutAmount || d.estimatedScrapValue || 800),
+      escapeCsv(d.payoutMethod || 'UPI'),
+      escapeCsv(`SEAL-CPCB-${d.id.slice(-4)}-2026`),
+      escapeCsv(d.registeredAt || new Date().toLocaleString())
+    ]);
+
+    const csvText = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `BharatEwaste_Collection_Manifest_Batch_${new Date().toISOString().split('T')[0]}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Download Sample CSV Template
+  const downloadSampleCsvTemplate = () => {
+    const sampleCsv = `Category,Brand,Model,SerialNumber,Condition,WeightKg,ConsignorName,ConsignorPhone,PayoutAmount\nSmartphone,Samsung,Galaxy S21,SM-G991B,working,0.17,Reliance Retail Logistics,+91 98200 11223,4500\nLaptop,Dell,Latitude 7490,DL7490912,working,1.42,Tata Consultancy Services,+91 98100 44556,9200\nPCB & Component Board,Cisco,Catalyst Switch Board,WS-C2960X,not_booting,3.10,HCL Technologies Data Center,+91 98300 77889,1800\nLithium Battery Pack,Luminous,Inverter LiFePO4 Pack,LUM48V-100,locked,12.50,GreenCity Telecom Towers,+91 98400 99001,5500\nCRT/LED Display Panel,LG,UltraFine 27 Monitor,27UL850,not_booting,4.80,Delhi Public School Computer Lab,+91 98111 22334,1100`;
+    const blob = new Blob([sampleCsv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'e_waste_collection_intake_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Parse uploaded CSV file from input
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedFileName(file.name);
+    setCsvUploadError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setCsvUploadError('Empty file provided.');
+        return;
+      }
+      parseRawCsvText(text);
+    };
+    reader.onerror = () => {
+      setCsvUploadError('Failed to read file.');
+    };
+    reader.readAsText(file);
+  };
+
+  const parseRawCsvText = (text: string) => {
+    const lines = text.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
+    if (lines.length < 2) {
+      setCsvUploadError('CSV must include header and at least one device record.');
+      setParsedUploadedRows([]);
+      return;
+    }
+
+    const parsed: Partial<DeviceItem>[] = [];
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      // Basic comma split with quote handling
+      const row = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      if (row.length < 4) {
+        errors.push(`Row ${i}: insufficient columns.`);
+        continue;
+      }
+
+      const category = (row[0] || 'PCB & Component Board') as DeviceCategory;
+      const brand = row[1] || 'Enterprise';
+      const model = row[2] || 'Hardware Node';
+      const serialNumber = row[3] || `SN-BULK-${Date.now().toString().slice(-4)}-${i}`;
+      const condition = (row[4] || 'working') as DeviceCondition;
+      const weight = parseFloat(row[5]) || 0.85;
+      const consignor = row[6] || 'Institutional Consignor';
+      const phone = row[7] || '+91 98000 00000';
+      const payout = parseFloat(row[8]) || (condition === 'working' ? 3200 : 900);
+
+      parsed.push({
+        id: `BHW-INTK-${Date.now().toString().slice(-4)}-${i}`,
+        category,
+        brand,
+        model,
+        serialNumber,
+        condition,
+        intakeWeightKg: weight,
+        userName: consignor,
+        userPhone: phone,
+        payoutAmount: payout,
+        estimatedScrapValue: Math.round(payout * 0.7),
+        resaleValue: condition === 'working' ? Math.round(payout * 1.4) : 0,
+        payoutMethod: 'Bank Transfer',
+        status: 'REGISTERED',
+        city: currentUser.city,
+        state: currentUser.state,
+        hubLocation: currentUser.organization || 'Central E-Waste Hub',
+        co2SavedKg: Math.round(weight * 80)
+      });
+    }
+
+    if (errors.length > 0 && parsed.length === 0) {
+      setCsvUploadError(errors.join(', '));
+      setParsedUploadedRows([]);
+    } else {
+      setParsedUploadedRows(parsed);
+      setCsvUploadError(errors.length > 0 ? `Warning: ${errors.length} rows skipped.` : null);
+    }
+  };
+
+  // Commit uploaded CSV rows
+  const handleCommitUploadedCsv = () => {
+    if (parsedUploadedRows.length === 0) return;
+    onBulkImportDevices(parsedUploadedRows);
+    alert(`Successfully onboarded and registered ${parsedUploadedRows.length} e-waste units from CSV!`);
+    setParsedUploadedRows([]);
+    setUploadedFileName(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setActiveSubTab('intake');
+  };
+
+  // Batch Form Grid helpers
+  const handleAddBatchRow = () => {
+    setBatchFormRows((prev) => [
+      ...prev,
+      {
+        id: `row-${Date.now()}`,
+        category: 'Smartphone',
+        brand: 'OnePlus',
+        model: 'Nord Series',
+        serialNumber: `SN-${Date.now().toString().slice(-6)}`,
+        condition: 'working',
+        weight: '0.19',
+        consignor: 'Corporate Campus Intake',
+        payout: '3500'
+      }
+    ]);
+  };
+
+  const handleUpdateBatchRow = (id: string, field: string, value: string) => {
+    setBatchFormRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const handleDeleteBatchRow = (id: string) => {
+    setBatchFormRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleCommitBatchForm = () => {
+    if (batchFormRows.length === 0) {
+      alert('Batch form contains zero rows.');
+      return;
+    }
+
+    const items: Partial<DeviceItem>[] = batchFormRows.map((r, idx) => ({
+      id: `BHW-BATCH-${Date.now().toString().slice(-4)}-${idx + 1}`,
+      category: r.category,
+      brand: r.brand,
+      model: r.model,
+      serialNumber: r.serialNumber,
+      condition: r.condition,
+      intakeWeightKg: parseFloat(r.weight) || 0.5,
+      userName: r.consignor || 'Bulk Consignor',
+      userPhone: '+91 98111 00000',
+      payoutAmount: parseFloat(r.payout) || 1200,
+      estimatedScrapValue: Math.round((parseFloat(r.payout) || 1200) * 0.7),
+      resaleValue: r.condition === 'working' ? (parseFloat(r.payout) || 1200) * 1.3 : 0,
+      payoutMethod: 'Bank Transfer',
+      status: 'REGISTERED',
+      city: currentUser.city,
+      state: currentUser.state,
+      hubLocation: currentUser.organization || 'Central E-Waste Hub',
+      co2SavedKg: Math.round((parseFloat(r.weight) || 0.5) * 85)
+    }));
+
+    onBulkImportDevices(items);
+    alert(`Successfully registered ${items.length} units from batch form intake!`);
+    setActiveSubTab('intake');
+  };
+
   // Bulk CSV parser
   const handleBulkParse = () => {
+    parseRawCsvText(csvContent);
     const lines = csvContent.trim().split('\n');
     if (lines.length < 2) {
       alert('CSV must contain a header and at least one data row.');
@@ -439,6 +745,16 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
               </span>
             </button>
           )}
+
+          {/* Export Manifest CSV Button */}
+          <button
+            onClick={handleExportManifest}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition shadow"
+            title="Download CSV manifest of all registered batch devices for offline compliance reporting"
+          >
+            <FileDown className="w-3.5 h-3.5 text-amber-400" />
+            <span>Export Manifest (CSV)</span>
+          </button>
 
           {/* Direct Field Consignment Button */}
           <button
@@ -542,7 +858,7 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
           }`}
         >
           <FileSpreadsheet className="w-4 h-4" />
-          <span>Bulk CSV Data Intake</span>
+          <span>Bulk Data Intake Mode</span>
         </button>
       </div>
 
@@ -551,9 +867,19 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Device Selector */}
           <div className="lg:col-span-5 space-y-3">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-              Incoming Queue for Verification
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                Incoming Queue for Verification
+              </span>
+              <button
+                onClick={handleExportManifest}
+                className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold"
+                title="Download CSV manifest"
+              >
+                <Download className="w-3 h-3" />
+                <span>Export Manifest</span>
+              </button>
+            </div>
 
             {devices.map((device) => (
               <div
@@ -582,30 +908,72 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
                   <span>ID: {device.id}</span>
                   <span className="text-slate-300">{device.userName}</span>
                 </div>
+
+                {/* Generate Tracking QR Button on Item */}
+                <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 font-mono">
+                    Weight: {device.intakeWeightKg || 0.25} kg
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGenerateTrackingQr(device);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1 transition"
+                    title="Generate printable tracking QR asset tag"
+                  >
+                    <QrCode className="w-3 h-3 text-emerald-400" />
+                    <span>Generate Tracking QR</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
           {/* Sanchar Saathi & Triage Form */}
           <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <span>Statutory Sanchar Saathi (CEIR) Verification</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Official DoT portal check to block stolen, blacklisted, or cloned mobile hardware before payout.
-              </p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <span>Statutory Sanchar Saathi (CEIR) Verification</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Official DoT portal check to block stolen, blacklisted, or cloned mobile hardware before payout.
+                </p>
+              </div>
+
+              {selectedDevice && (
+                <button
+                  type="button"
+                  onClick={() => handleGenerateTrackingQr(selectedDevice)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition shrink-0"
+                  title="Create printable tracking QR label for this unit"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Generate Tracking QR</span>
+                </button>
+              )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <input
                 type="text"
                 value={imeiInput}
                 onChange={(e) => setImeiInput(e.target.value)}
                 placeholder="Enter 15-digit IMEI number"
-                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                className="flex-1 min-w-[200px] bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
               />
+              <button
+                type="button"
+                onClick={() => setImeiInput(generateValidImei(selectedDevice?.brand || 'Samsung'))}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5"
+                title="Generate an authentic 15-digit IMEI with valid Luhn checksum"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Generate Unique</span>
+              </button>
               <button
                 onClick={handleCheckImei}
                 disabled={imeiChecking}
@@ -1111,42 +1479,369 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
         </div>
       )}
 
-      {/* SubTab 5: Bulk CSV Data Intake */}
+      {/* SubTab 5: Bulk Data Intake Mode */}
       {activeSubTab === 'bulk_import' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-          <div className="border-b border-slate-800 pb-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-              <span>Bulk Institutional & Corporate E-Waste CSV Intake</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Fast-track intake for universities, corporate IT parks, and government ministries decommissioning hundreds of end-of-life devices.
-            </p>
-          </div>
+        <div className="space-y-6">
+          {/* Header Card with Mode Switcher */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+                  <span>Bulk Institutional &amp; Corporate E-Waste Intake Center</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  High-throughput onboarding for corporate fleets, campus decommissioning, and bulk batch consignments.
+                </p>
+              </div>
 
-          <div className="space-y-3">
-            <label className="block text-xs font-semibold text-slate-300">
-              CSV Manifest (Comma-separated values with headers)
-            </label>
-            <textarea
-              rows={6}
-              value={csvContent}
-              onChange={(e) => setCsvContent(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
-            />
-            <p className="text-[11px] text-slate-400">
-              Format: Category, Brand, Model, SerialNumber, Condition (working/locked/not_booting), WeightKg
-            </p>
-          </div>
+              {/* Mode Switcher Tabs */}
+              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setBulkMode('csv_upload')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                    bulkMode === 'csv_upload'
+                      ? 'bg-amber-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileUp className="w-3.5 h-3.5" />
+                  <span>CSV File Upload</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkMode('batch_form')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                    bulkMode === 'batch_form'
+                      ? 'bg-amber-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Table className="w-3.5 h-3.5" />
+                  <span>Batch Form Entry</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkMode('csv_text')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                    bulkMode === 'csv_text'
+                      ? 'bg-amber-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Direct CSV Editor</span>
+                </button>
+              </div>
+            </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              onClick={handleBulkParse}
-              className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white transition shadow-lg shadow-amber-600/20 flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              <span>Parse & Ingest Bulk Manifest</span>
-            </button>
+            {/* Sub-mode 1: CSV File Upload & Live Parser */}
+            {bulkMode === 'csv_upload' && (
+              <div className="pt-5 space-y-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <FileSpreadsheet className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Download Standard CPCB Intake CSV Template</h4>
+                      <p className="text-[11px] text-slate-400">Pre-formatted with required fields: Category, Brand, Model, Serial, Condition, Weight, Consignor</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={downloadSampleCsvTemplate}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                  >
+                    <Download className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Download CSV Template</span>
+                  </button>
+                </div>
+
+                {/* Drag and Drop Zone */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-2xl p-8 text-center cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/70 space-y-3"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">
+                      {uploadedFileName ? `Selected: ${uploadedFileName}` : 'Drop institutional CSV manifest here, or click to browse'}
+                    </span>
+                    <span className="text-[11px] text-slate-400 block mt-1">
+                      Accepts standard .csv files up to 25MB • Automated schema parser &amp; validator
+                    </span>
+                  </div>
+                </div>
+
+                {csvUploadError && (
+                  <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-600/40 text-xs text-rose-300 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{csvUploadError}</span>
+                  </div>
+                )}
+
+                {/* Parsed Rows Preview */}
+                {parsedUploadedRows.length > 0 && (
+                  <div className="space-y-3 border-t border-slate-800 pt-5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Parsed Valid Consignments ({parsedUploadedRows.length} Units Ready)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleCommitUploadedCsv}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition shadow-lg shadow-emerald-600/20 flex items-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Ingest All {parsedUploadedRows.length} Devices to Central Registry</span>
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-72">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800 sticky top-0">
+                          <tr>
+                            <th className="p-3">#</th>
+                            <th className="p-3">Category</th>
+                            <th className="p-3">Make &amp; Model</th>
+                            <th className="p-3">Serial / IMEI</th>
+                            <th className="p-3">Condition</th>
+                            <th className="p-3">Weight (kg)</th>
+                            <th className="p-3">Consignor</th>
+                            <th className="p-3">Est. Payout</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                          {parsedUploadedRows.map((row, idx) => (
+                            <tr key={idx} className="hover:bg-slate-800/40 transition">
+                              <td className="p-3 text-slate-500">{idx + 1}</td>
+                              <td className="p-3 font-sans text-white">{row.category}</td>
+                              <td className="p-3 font-sans text-slate-200">{row.brand} {row.model}</td>
+                              <td className="p-3 text-cyan-400">{row.serialNumber}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  row.condition === 'working' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-300'
+                                }`}>
+                                  {row.condition}
+                                </span>
+                              </td>
+                              <td className="p-3 text-amber-400 font-bold">{row.intakeWeightKg} kg</td>
+                              <td className="p-3 font-sans text-slate-300">{row.userName}</td>
+                              <td className="p-3 text-emerald-400 font-bold font-sans">₹{row.payoutAmount?.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sub-mode 2: Interactive Multi-Row Batch Form Entry */}
+            {bulkMode === 'batch_form' && (
+              <div className="pt-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Dynamic Multi-Unit Spread Entry</h4>
+                    <p className="text-[11px] text-slate-400">Add or edit multiple device details directly in tabular rows for quick intake.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddBatchRow}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Device Row</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCommitBatchForm}
+                      className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white transition shadow flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Commit Batch Intake ({batchFormRows.length})</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-left text-xs text-slate-300 min-w-[760px]">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-2.5">Category</th>
+                        <th className="p-2.5">Brand</th>
+                        <th className="p-2.5">Model</th>
+                        <th className="p-2.5">Serial / IMEI</th>
+                        <th className="p-2.5">Condition</th>
+                        <th className="p-2.5 w-24">Weight (kg)</th>
+                        <th className="p-2.5">Consignor Organization</th>
+                        <th className="p-2.5 w-24">Payout (₹)</th>
+                        <th className="p-2.5 text-center w-12">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans text-xs">
+                      {batchFormRows.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-800/30 transition">
+                          <td className="p-2">
+                            <select
+                              value={row.category}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'category', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-amber-500"
+                            >
+                              <option value="Smartphone">Smartphone</option>
+                              <option value="Laptop">Laptop</option>
+                              <option value="Tablet">Tablet</option>
+                              <option value="PCB & Component Board">PCB &amp; Component Board</option>
+                              <option value="Lithium Battery Pack">Lithium Battery Pack</option>
+                              <option value="CRT/LED Display Panel">CRT/LED Display Panel</option>
+                            </select>
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={row.brand}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'brand', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={row.model}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'model', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={row.serialNumber}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'serialNumber', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={row.condition}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'condition', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-amber-500"
+                            >
+                              <option value="working">Working</option>
+                              <option value="locked">Locked</option>
+                              <option value="not_booting">Not Booting</option>
+                            </select>
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={row.weight}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'weight', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              value={row.consignor}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'consignor', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              value={row.payout}
+                              onChange={(e) => handleUpdateBatchRow(row.id, 'payout', e.target.value)}
+                              className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono w-full focus:outline-none focus:border-amber-500"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBatchRow(row.id)}
+                              className="text-slate-500 hover:text-rose-400 transition p-1"
+                              title="Delete row"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-xs text-slate-400 font-mono">
+                    Total Batch Payload: {batchFormRows.reduce((acc, r) => acc + (parseFloat(r.weight) || 0), 0).toFixed(2)} kg
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCommitBatchForm}
+                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white transition shadow-lg shadow-amber-600/20 flex items-center gap-2"
+                  >
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Commit Batch Intake to Central Database</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Sub-mode 3: Direct Raw CSV Editor */}
+            {bulkMode === 'csv_text' && (
+              <div className="pt-5 space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Raw CSV Manifest Editor (Headers Required)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={downloadSampleCsvTemplate}
+                      className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Download Sample CSV</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={csvContent}
+                    onChange={(e) => setCsvContent(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Format: Category, Brand, Model, SerialNumber, Condition (working/locked/not_booting), WeightKg
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkParse}
+                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white transition shadow-lg shadow-amber-600/20 flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Parse &amp; Ingest Bulk Manifest</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1541,6 +2236,227 @@ export const CollectionConsoleView: React.FC<CollectionConsoleViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Printable Tracking QR Label Modal */}
+      {trackingQrDevice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tracking-qr-label-title"
+        >
+          <div className="w-full max-w-xl bg-slate-900 border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="tracking-qr-label-title" className="text-sm font-bold text-white">
+                    Official CPCB Asset Tag &amp; Tracking QR Label
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Schedule-1 Tamper-Evident Physical Tag • Case #{trackingQrDevice.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTrackingQrDevice(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Printable Label Container */}
+            <div className="p-6 overflow-y-auto space-y-5 bg-slate-950/40">
+              <div className="bg-white text-slate-900 p-6 rounded-2xl border-2 border-slate-300 shadow-xl space-y-4 print-only-container">
+                {/* Tag Header */}
+                <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 block">
+                      GOVT. OF INDIA • CPCB STATUTORY AUDIT TAG
+                    </span>
+                    <h4 className="text-base font-black text-slate-950 tracking-tight mt-0.5">
+                      {trackingQrDevice.brand} {trackingQrDevice.model}
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-600 block">
+                      Category: {trackingQrDevice.category}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 uppercase">
+                    CERTIFIED INTAKE
+                  </span>
+                </div>
+
+                {/* QR and Meta Columns */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+                  {/* High-Resolution SVG QR Representation */}
+                  <div className="sm:col-span-5 flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-300 rounded-xl">
+                    <svg viewBox="0 0 120 120" className="w-32 h-32 text-slate-950">
+                      {/* Corner Position Detection Squares */}
+                      <rect x="5" y="5" width="30" height="30" fill="currentColor" rx="2" />
+                      <rect x="9" y="9" width="22" height="22" fill="#fff" rx="1" />
+                      <rect x="13" y="13" width="14" height="14" fill="currentColor" rx="1" />
+
+                      <rect x="85" y="5" width="30" height="30" fill="currentColor" rx="2" />
+                      <rect x="89" y="9" width="22" height="22" fill="#fff" rx="1" />
+                      <rect x="93" y="13" width="14" height="14" fill="currentColor" rx="1" />
+
+                      <rect x="5" y="85" width="30" height="30" fill="currentColor" rx="2" />
+                      <rect x="9" y="89" width="22" height="22" fill="#fff" rx="1" />
+                      <rect x="13" y="93" width="14" height="14" fill="currentColor" rx="1" />
+
+                      {/* Dynamic Modules based on device id */}
+                      <rect x="42" y="10" width="8" height="8" fill="currentColor" />
+                      <rect x="56" y="12" width="6" height="6" fill="currentColor" />
+                      <rect x="68" y="8" width="10" height="8" fill="currentColor" />
+                      <rect x="44" y="24" width="12" height="6" fill="currentColor" />
+                      <rect x="62" y="22" width="8" height="10" fill="currentColor" />
+
+                      <rect x="12" y="44" width="8" height="8" fill="currentColor" />
+                      <rect x="26" y="48" width="10" height="6" fill="currentColor" />
+                      <rect x="42" y="42" width="14" height="14" fill="currentColor" />
+                      <rect x="62" y="40" width="8" height="8" fill="currentColor" />
+                      <rect x="76" y="44" width="12" height="6" fill="currentColor" />
+                      <rect x="94" y="42" width="8" height="10" fill="currentColor" />
+                      <rect x="108" y="46" width="6" height="8" fill="currentColor" />
+
+                      <rect x="14" y="60" width="12" height="8" fill="currentColor" />
+                      <rect x="32" y="62" width="8" height="10" fill="currentColor" />
+                      <rect x="46" y="60" width="10" height="8" fill="currentColor" />
+                      <rect x="62" y="58" width="12" height="12" fill="currentColor" />
+                      <rect x="80" y="60" width="8" height="8" fill="currentColor" />
+                      <rect x="94" y="62" width="14" height="6" fill="currentColor" />
+
+                      <rect x="42" y="80" width="10" height="8" fill="currentColor" />
+                      <rect x="58" y="78" width="8" height="12" fill="currentColor" />
+                      <rect x="72" y="82" width="12" height="8" fill="currentColor" />
+                      <rect x="90" y="80" width="8" height="8" fill="currentColor" />
+                      <rect x="104" y="84" width="10" height="6" fill="currentColor" />
+
+                      <rect x="44" y="96" width="14" height="8" fill="currentColor" />
+                      <rect x="64" y="98" width="8" height="10" fill="currentColor" />
+                      <rect x="78" y="94" width="10" height="10" fill="currentColor" />
+                      <rect x="94" y="96" width="12" height="8" fill="currentColor" />
+                      <rect x="110" y="98" width="5" height="8" fill="currentColor" />
+                    </svg>
+                    <span className="text-[9px] font-mono font-bold text-slate-700 mt-1">
+                      {trackingQrDevice.id}
+                    </span>
+                  </div>
+
+                  {/* Metadata Spec Table */}
+                  <div className="sm:col-span-7 space-y-2 text-xs font-mono">
+                    <div className="p-2 rounded bg-slate-100 border border-slate-300">
+                      <span className="text-[10px] text-slate-500 uppercase block font-bold">Physical Custody Bin</span>
+                      <span className="font-black text-slate-950 text-sm">
+                        BIN-{(trackingQrDevice.city || 'DEL').slice(0, 3).toUpperCase()}-{trackingQrDevice.id.slice(-4)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200">
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold">Transit Pallet</span>
+                        <span className="font-bold text-slate-900 truncate block">
+                          PALLET-{trackingQrDevice.batchId || trackingQrDevice.id.slice(-4)}
+                        </span>
+                      </div>
+                      <div className="p-1.5 rounded bg-slate-50 border border-slate-200">
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold">Scale Gross Wt.</span>
+                        <span className="font-black text-emerald-800">
+                          {trackingQrDevice.intakeWeightKg || 0.25} kg
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-1.5 rounded bg-slate-50 border border-slate-200 text-[10px]">
+                      <div><strong>Serial / IMEI:</strong> {trackingQrDevice.serialNumber || trackingQrDevice.imei || 'OEM-STAMPED'}</div>
+                      <div><strong>Consignor:</strong> {trackingQrDevice.userName}</div>
+                      <div><strong>Tamper Seal:</strong> SEAL-CPCB-{trackingQrDevice.id.slice(-4)}-2026</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Bar */}
+                <div className="border-t border-slate-300 pt-2 flex items-center justify-between text-[10px] text-slate-600 font-sans">
+                  <span>Inspector: {currentUser.name} ({currentUser.id})</span>
+                  <span>Station: {currentUser.organization || 'Hub Logistics'}</span>
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 space-y-1">
+                <span className="font-bold text-white block">Operator Instructions:</span>
+                <p className="text-[11px] leading-relaxed">
+                  Print onto standard 4x3-inch thermal adhesive labels and adhere directly to the front chassis or anti-static ESD carrier bag before placing into pallet transit lot.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-5 py-4 border-t border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {onOpenQrModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = trackingQrDevice.id;
+                      setTrackingQrDevice(null);
+                      onOpenQrModal(id);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-400 border border-cyan-500/30 transition flex items-center gap-1.5"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Open in Full CoC Scanner</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const payload = JSON.stringify({
+                      registry: 'CPCB-GOI-EWASTE',
+                      id: trackingQrDevice.id,
+                      model: `${trackingQrDevice.brand} ${trackingQrDevice.model}`,
+                      weightKg: trackingQrDevice.intakeWeightKg,
+                      seal: `SEAL-CPCB-${trackingQrDevice.id.slice(-4)}-2026`,
+                      consignor: trackingQrDevice.userName
+                    }, null, 2);
+                    navigator.clipboard?.writeText(payload);
+                    setCopiedLabelText(true);
+                    setTimeout(() => setCopiedLabelText(false), 2000);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition flex items-center gap-1.5"
+                >
+                  {copiedLabelText ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLabelText ? 'Copied' : 'Copy JSON'}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTrackingQrDevice(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 print-include"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Tracking Label</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

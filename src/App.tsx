@@ -19,6 +19,7 @@ import { PushNotificationToast } from './components/PushNotificationToast';
 import { DEMO_USERS, MOCK_DEVICES, SYSTEM_ALERTS, INITIAL_COMPLIANCE_REMINDERS } from './data/mockData';
 import { ComplianceDeadlineReminder, DeviceItem, OperatorIntervention, Role, SystemAlert, UserProfile } from './types';
 import { findStoredUser, saveUserData } from './utils/userStorage';
+import { ensureDeviceImeis } from './utils/imeiUtils';
 
 export default function App() {
   // Launch login page first by default
@@ -27,7 +28,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   // Core Data State
-  const [devices, setDevices] = useState<DeviceItem[]>(MOCK_DEVICES);
+  const [devices, setDevices] = useState<DeviceItem[]>(() => ensureDeviceImeis(MOCK_DEVICES));
   const [alerts, setAlerts] = useState<SystemAlert[]>(SYSTEM_ALERTS);
   const [reminders, setReminders] = useState<ComplianceDeadlineReminder[]>(INITIAL_COMPLIANCE_REMINDERS);
   const [activePushNotification, setActivePushNotification] = useState<{
@@ -600,6 +601,7 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateDeviceStatus={handleUpdateDeviceStatus}
                 onBulkImportDevices={handleBulkImportDevices}
+                onOpenQrModal={handleOpenQrModal}
               />
             )}
 
