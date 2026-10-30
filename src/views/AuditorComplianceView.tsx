@@ -24,7 +24,9 @@ import {
   Layers,
   Database,
   ArrowRight,
-  Smartphone
+  Smartphone,
+  Zap,
+  BellRing
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { AUDIT_LOGS, CPCB_RECYCLERS, NATIONAL_STATS } from '../data/mockData';
@@ -36,6 +38,15 @@ import { AuditInsightsCard } from '../components/AuditInsightsCard';
 import { StateComplianceDetailModal } from '../components/StateComplianceDetailModal';
 import { AnnualComplianceReportModal } from '../components/AnnualComplianceReportModal';
 import { ImeiDeviceLookupCard } from '../components/ImeiDeviceLookupCard';
+import { RegionalSparklineChart } from '../components/RegionalSparklineChart';
+import { AnnualAuditHistoryTable } from '../components/AnnualAuditHistoryTable';
+import { CpcbForm6AuditReportModal } from '../components/CpcbForm6AuditReportModal';
+import { DigitalAuditTrailModal, getStoredOverrides, saveStoredOverride, AuditorOverrideRecord } from '../components/DigitalAuditTrailModal';
+import { NationalHubRiskMap } from '../components/NationalHubRiskMap';
+import { ComplianceAiInsightPanel } from '../components/ComplianceAiInsightPanel';
+import { BulkNotifyHubsModal } from '../components/BulkNotifyHubsModal';
+import { QuarterlySummaryModal } from '../components/QuarterlySummaryModal';
+import { MapPin } from 'lucide-react';
 
 export interface DeviceLifecycleEvent {
   id: string;
@@ -59,6 +70,7 @@ interface AuditorComplianceViewProps {
   currentUser: UserProfile;
   devices: DeviceItem[];
   onResolveFlag?: (deviceId: string) => void;
+  onClearAllFlags?: () => void;
   reminders?: ComplianceDeadlineReminder[];
   onAddReminder?: (reminder: ComplianceDeadlineReminder) => void;
   onDeleteReminder?: (id: string) => void;
@@ -69,19 +81,76 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   currentUser,
   devices,
   onResolveFlag,
+  onClearAllFlags,
   reminders = [],
   onAddReminder = () => {},
   onDeleteReminder = () => {},
   onTriggerPushNotification = () => {}
 }) => {
-  const [activeTab, setActiveTab] = useState<'scorecard' | 'imei_terminal' | 'compliance_logs' | 'history' | 'calendar' | 'cpcb_targets' | 'heatmap' | 'audit_trail' | 'recycler_directory'>('scorecard');
+  const [activeTab, setActiveTab] = useState<'scorecard' | 'national_map' | 'audit_history' | 'imei_terminal' | 'compliance_logs' | 'history' | 'calendar' | 'cpcb_targets' | 'heatmap' | 'audit_trail' | 'recycler_directory'>('scorecard');
   const [searchLog, setSearchLog] = useState('');
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
   const [showAnnualReportModal, setShowAnnualReportModal] = useState(false);
+  const [showForm6Modal, setShowForm6Modal] = useState(false);
+  const [showDigitalAuditTrailModal, setShowDigitalAuditTrailModal] = useState(false);
+  const [showBulkNotifyModal, setShowBulkNotifyModal] = useState(false);
+  const [showQuarterlySummaryModal, setShowQuarterlySummaryModal] = useState(false);
+  const [quickActionToast, setQuickActionToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  const [storedOverridesCount, setStoredOverridesCount] = useState<number>(() => getStoredOverrides().length);
   const [selectedHeatmapState, setSelectedHeatmapState] = useState<StateComplianceData | null>(null);
+  const [selectedSparklineState, setSelectedSparklineState] = useState<StateComplianceData>(STATE_COMPLIANCE_DATA[0]);
   const [complianceSearch, setComplianceSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<'all' | 'intake' | 'ceir' | 'wipe' | 'scale' | 'payout' | 'intervention' | 'audit'>('all');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+
+  // Quick Action: Clear All Pending Quarantined Flags
+  const handleClearAllFlagsClick = () => {
+    const pendingFlags = devices.filter((d) => d.status === 'FLAGGED' || d.status === 'HOLD');
+    if (pendingFlags.length === 0) {
+      setQuickActionToast({
+        message: 'No pending flagged or quarantined units in the central queue.',
+        type: 'info'
+      });
+      setTimeout(() => setQuickActionToast(null), 3000);
+      return;
+    }
+
+    if (onClearAllFlags) {
+      onClearAllFlags();
+    }
+
+    const hexChars = '0123456789abcdef';
+    let randHash = '';
+    for (let i = 0; i < 64; i++) {
+      randHash += hexChars[Math.floor(Math.random() * hexChars.length)];
+    }
+
+    saveStoredOverride({
+      id: `OVR-BATCH-${Math.floor(1000 + Math.random() * 9000)}`,
+      timestamp: new Date().toLocaleString('en-IN') + ' IST',
+      deviceId: `BATCH (${pendingFlags.length} Units)`,
+      makeModel: `${pendingFlags.length} Quarantined Units`,
+      previousStatus: 'FLAGGED',
+      newStatus: 'CLEARED',
+      reasonCategory: 'Directorial Discretion Clearance',
+      justificationNotes: `Batch clearance executed via Quick Audit Actions toolbar. All ${pendingFlags.length} pending discrepancies reviewed and cleared under supervisory authority.`,
+      auditorId: currentUser.id,
+      auditorName: currentUser.name,
+      auditorRole: currentUser.role,
+      stationNode: 'CPCB Central Regulatory Node',
+      cryptographicHash: randHash,
+      blockHeight: 892150,
+      auditStatus: 'COMMITTED_IMMUTABLE'
+    });
+
+    setStoredOverridesCount((prev) => prev + 1);
+
+    setQuickActionToast({
+      message: `Cleared all ${pendingFlags.length} pending quarantine flags and recorded to Digital Audit Trail!`,
+      type: 'success'
+    });
+    setTimeout(() => setQuickActionToast(null), 4000);
+  };
 
   // Synthesize complete, immutable device lifecycle events across the registry
   const lifecycleEvents: DeviceLifecycleEvent[] = useMemo(() => {
@@ -349,7 +418,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/60 border border-purple-800/50 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="auditor-header-banner p-6 rounded-2xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/60 border border-purple-800/50 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
             <Building2 className="w-3.5 h-3.5" />
@@ -364,24 +433,94 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* Quick Audit Actions Toolbar next to export button */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-purple-500/30 shadow-inner">
+            <span className="text-[10px] font-mono font-bold text-amber-400 px-2 flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Quick Actions:</span>
+            </span>
+
+            <button
+              onClick={handleClearAllFlagsClick}
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              title="Batch clear all pending quarantined flags across registry"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span>Clear All Pending Flags</span>
+            </button>
+
+            <button
+              onClick={() => setShowBulkNotifyModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              title="Broadcast filing directives to all 22 state hubs"
+            >
+              <BellRing className="w-3.5 h-3.5" />
+              <span>Bulk Notify Hubs</span>
+            </button>
+
+            <button
+              onClick={() => setShowQuarterlySummaryModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              title="Generate quarterly executive summary with print & export"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Generate Quarterly Summary</span>
+            </button>
+          </div>
+
           <button
-            onClick={handleExportAllAuditLogs}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 hover:text-white border border-slate-700 transition flex items-center gap-2 shadow"
-            title="Download full tamper-proof CSV of all device lifecycle events and audit trails"
+            onClick={() => setShowDigitalAuditTrailModal(true)}
+            className="px-3 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900/80 text-xs font-bold text-purple-200 hover:text-white transition shadow flex items-center gap-2 border border-purple-600/50"
+            title="Inspect persistent digital audit trail of manual status overrides and flag resolutions"
           >
-            <Download className="w-4 h-4 text-purple-400" />
-            <span>Export All Audit Logs</span>
+            <Lock className="w-4 h-4 text-purple-400" />
+            <span>Digital Audit Trail ({storedOverridesCount})</span>
           </button>
 
           <button
-            onClick={() => setShowSubmissionModal(true)}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/20 flex items-center gap-2"
+            onClick={() => setShowForm6Modal(true)}
+            className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/30 flex items-center gap-2 border border-purple-500/50"
+            title="Export formal CPCB Form-6 regulatory transit manifest & audit report (Rule 19)"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Export Audit Report (Form-6)</span>
+          </button>
+
+          <button
+            onClick={() => setShowAnnualReportModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition shadow-lg shadow-indigo-600/20 flex items-center gap-2 border border-indigo-500/40"
+            title="Download print-friendly CPCB annual compliance dossier"
           >
             <FileText className="w-4 h-4" />
-            <span>Generate CPCB Form-3 Audit Filing PDF</span>
+            <span>Download Annual Report</span>
+          </button>
+
+          <button
+            onClick={handleExportAllAuditLogs}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 hover:text-white border border-slate-700 transition flex items-center gap-2 shadow"
+            title="Download full tamper-proof CSV of all device lifecycle events and audit trails"
+          >
+            <Download className="w-4 h-4 text-purple-400" />
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
+
+      {/* Quick Action Notification Toast */}
+      {quickActionToast && (
+        <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-xs flex items-center justify-between shadow-2xl animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <CheckCheck className="w-4 h-4 text-emerald-400" />
+            <span className="font-semibold">{quickActionToast.message}</span>
+          </div>
+          <button
+            onClick={() => setQuickActionToast(null)}
+            className="text-emerald-400 hover:text-white font-bold p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Sub Tabs */}
       <div className="flex border-b border-slate-800 overflow-x-auto no-scrollbar">
@@ -394,7 +533,39 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
-          <span>Auditor Scorecard & Flags</span>
+          <span>Auditor Scorecard &amp; Flags</span>
+        </button>
+
+        {/* National Geography Hub Risk Map Tab */}
+        <button
+          onClick={() => setActiveTab('national_map')}
+          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+            activeTab === 'national_map'
+              ? 'border-purple-500 text-purple-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <MapPin className="w-4 h-4" />
+          <span>National Hub Risk Map</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold font-mono">
+            High-Risk vs Certified
+          </span>
+        </button>
+
+        {/* Annual Audit History Tab */}
+        <button
+          onClick={() => setActiveTab('audit_history')}
+          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+            activeTab === 'audit_history'
+              ? 'border-purple-500 text-purple-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Annual Audit History</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
+            10 State Hubs
+          </span>
         </button>
 
         {/* Primary New Compliance Logs Tab */}
@@ -493,6 +664,19 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
       {/* Tab 1: Auditor Scorecard */}
       {activeTab === 'scorecard' && (
         <div className="space-y-6">
+          {/* AI-Powered Compliance Insight & Regional Risk Overview */}
+          <ComplianceAiInsightPanel
+            devices={devices}
+            onInspectFlagged={() => {
+              const el = document.getElementById('quarantine-queue-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onSelectState={(stateData) => {
+              setSelectedHeatmapState(stateData);
+              setSelectedSparklineState(stateData);
+            }}
+          />
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
               <span className="text-slate-400 text-xs">Total Registered Units</span>
@@ -521,6 +705,15 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               <span className="text-[10px] text-rose-400/80">Pending Admin Action</span>
             </div>
           </div>
+
+          {/* National Geography Hub Risk Heatmap (High-Risk vs Certified Hubs) */}
+          <NationalHubRiskMap
+            devices={devices}
+            onSelectState={(stateData) => {
+              setSelectedHeatmapState(stateData);
+              setSelectedSparklineState(stateData);
+            }}
+          />
 
           {/* Audit Insights Card powered by mock analytic model */}
           <AuditInsightsCard
@@ -594,9 +787,12 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                   return (
                     <button
                       key={d.state}
-                      onClick={() => setSelectedHeatmapState(d)}
+                      onClick={() => {
+                        setSelectedHeatmapState(d);
+                        setSelectedSparklineState(d);
+                      }}
                       className="p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 relative overflow-hidden text-left cursor-pointer transition hover:scale-[1.02] group"
-                      title={`Click to open ${d.state} detailed collection metrics and category risk dossier`}
+                      title={`Click to inspect 6-month sparkline trend & category risk dossier for ${d.state}`}
                     >
                       <div className="absolute top-0 left-0 right-0 h-1.5" style={{ backgroundColor: color }} />
                       <div className="flex items-center justify-between mt-1">
@@ -622,6 +818,13 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* 6-Month Historical Regional E-Waste Collection Performance Sparkline */}
+          <RegionalSparklineChart
+            selectedState={selectedSparklineState}
+            allStates={STATE_COMPLIANCE_DATA}
+            onSelectState={(st) => setSelectedSparklineState(st)}
+          />
 
           {/* Sanchar Saathi CEIR & Device IMEI Verification Terminal */}
           <ImeiDeviceLookupCard devices={devices} />
@@ -976,6 +1179,26 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         </div>
       )}
 
+      {/* Tab: National Geography Hub Risk Heatmap */}
+      {activeTab === 'national_map' && (
+        <div className="space-y-6">
+          <NationalHubRiskMap
+            devices={devices}
+            onSelectState={(stateData) => {
+              setSelectedHeatmapState(stateData);
+              setSelectedSparklineState(stateData);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Tab: Annual Audit History for State-Registered Hubs */}
+      {activeTab === 'audit_history' && (
+        <AnnualAuditHistoryTable
+          onExportAuditReport={() => setShowForm6Modal(true)}
+        />
+      )}
+
       {/* Tab: Compliance History Log */}
       {activeTab === 'history' && (
         <ComplianceHistoryLog devices={devices} currentUser={currentUser} />
@@ -1226,6 +1449,50 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           currentUser={currentUser}
           devices={devices}
           onClose={() => setShowAnnualReportModal(false)}
+        />
+      )}
+
+      {/* Formal CPCB Form-6 Regulatory Transit Manifest & Audit Report Modal */}
+      {showForm6Modal && (
+        <CpcbForm6AuditReportModal
+          currentUser={currentUser}
+          devices={devices}
+          onClose={() => setShowForm6Modal(false)}
+        />
+      )}
+
+      {/* Digital Audit Trail Modal (Persistent in localStorage) */}
+      {showDigitalAuditTrailModal && (
+        <DigitalAuditTrailModal
+          currentUser={currentUser}
+          devices={devices}
+          onClose={() => setShowDigitalAuditTrailModal(false)}
+          onRecordNewOverride={() => {
+            setStoredOverridesCount((prev) => prev + 1);
+          }}
+        />
+      )}
+
+      {/* Bulk Notify Hubs Modal */}
+      {showBulkNotifyModal && (
+        <BulkNotifyHubsModal
+          onClose={() => setShowBulkNotifyModal(false)}
+          onBroadcastComplete={(count, topic) => {
+            setQuickActionToast({
+              message: `Official directive [${topic}] successfully transmitted to ${count} regional hubs!`,
+              type: 'success'
+            });
+            setTimeout(() => setQuickActionToast(null), 4500);
+          }}
+        />
+      )}
+
+      {/* CPCB Form-6 Quarterly Summary Report Modal */}
+      {showQuarterlySummaryModal && (
+        <QuarterlySummaryModal
+          currentUser={currentUser}
+          devices={devices}
+          onClose={() => setShowQuarterlySummaryModal(false)}
         />
       )}
     </div>

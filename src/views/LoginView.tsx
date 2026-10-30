@@ -333,39 +333,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
         {/* Right Side: Role Selector & Login Console */}
         <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl space-y-5">
-          {/* Instant 1-Click Access Banner */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-teal-950/60 to-slate-900 border border-emerald-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl shadow-emerald-950/30">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  Instant Citizen &amp; Public Access
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
-                  No Password
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300">
-                Click below to immediately enter the Citizen Intake Portal, Camera Scanner, and PDF Export.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onLogin('citizen', DEMO_USERS.citizen, false)}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 shrink-0"
-            >
-              <span>Explore Citizen Portal</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
 
           {/* Main Navigation Tabs */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
             <div>
               <h2 className="text-base font-bold text-white">Access Portal</h2>
               <p className="text-xs text-slate-400">
-                Official officers require Special ID and password <strong className="text-emerald-400">maitri</strong>
+                Official statutory officers authenticate with authorized Department credentials
               </p>
             </div>
             <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
@@ -405,16 +379,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
           </div>
 
-          {/* TAB 1: STATUTORY OFFICERS (SPECIAL IDS & PASSWORD 'maitri') */}
+          {/* TAB 1: STATUTORY OFFICERS */}
           {activeTab === 'officer' && (
             <div className="space-y-4">
               {/* Quick Official Credentials Chips */}
               <div>
                 <div className="flex items-center justify-between text-xs text-slate-300 font-semibold mb-2">
-                  <span>Select Statutory Officer ID to Auto-Fill:</span>
-                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
-                    Password: maitri
-                  </span>
+                  <span>Select Statutory Officer Department:</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {STATUTORY_OFFICERS.map((officer) => {
@@ -436,7 +407,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         </div>
                         <div className="overflow-hidden">
                           <div className="text-xs font-bold text-white truncate">{officer.title}</div>
-                          <div className="text-[10px] font-mono text-amber-400/90 truncate">{officer.id}</div>
+                          <div className="text-[10px] text-slate-400 truncate">{officer.dept}</div>
                         </div>
                       </button>
                     );
@@ -459,17 +430,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         setOfficerId(e.target.value);
                         setOfficerError(null);
                       }}
-                      placeholder="e.g. ENG-COL-104, ENG-FAC-302, AUD-CPCB-77, ADM-NATIONAL-01"
+                      placeholder="Enter authorized Department ID..."
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white font-mono uppercase tracking-wide focus:outline-none focus:border-amber-500"
                       required
                     />
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5">
-                    <span>Valid IDs:</span>
-                    <span className="font-mono text-slate-400">ENG-COL-104</span> •
-                    <span className="font-mono text-slate-400">ENG-FAC-302</span> •
-                    <span className="font-mono text-slate-400">AUD-CPCB-77</span> •
-                    <span className="font-mono text-slate-400">ADM-NATIONAL-01</span>
                   </div>
                 </div>
 
@@ -478,9 +442,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     <label className="text-xs font-semibold text-slate-300">
                       Statutory Password *
                     </label>
-                    <span className="text-[10px] text-emerald-400 font-mono">
-                      (Password is <strong>maitri</strong>)
-                    </span>
                   </div>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -491,7 +452,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         setOfficerPassword(e.target.value);
                         setOfficerError(null);
                       }}
-                      placeholder="Enter password (maitri)"
+                      placeholder="Enter statutory password..."
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
                       required
                     />
@@ -515,13 +476,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
-
-              <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2">
-                <Info className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>
-                  High-privilege roles (CPCB Auditor & Master Admin) will also trigger biometric passkey verification in accordance with statutory guidelines.
-                </span>
-              </div>
             </div>
           )}
 
@@ -817,9 +771,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                           <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60">
                             ID: {item.id}
                           </span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-emerald-400 border border-slate-800">
-                            Pass: maitri
-                          </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           {item.officerName} • {item.dept}
@@ -965,7 +916,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               </div>
               <div className="flex items-center justify-between text-slate-400">
                 <span>Statutory Passcode:</span>
-                <span className="text-emerald-300 font-bold">maitri (Validated)</span>
+                <span className="text-emerald-300 font-bold">Encrypted &amp; Authenticated</span>
               </div>
             </div>
 

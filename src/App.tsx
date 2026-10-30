@@ -39,24 +39,13 @@ export default function App() {
     deadline: string;
   } | null>(null);
 
-  // Theme state: 'dark' vs 'compliance-light' (high-contrast daylight regulatory audit mode)
-  const [theme, setTheme] = useState<'dark' | 'compliance-light'>('dark');
-
+  // Enforce permanent Dark Ops mode across the entire national portal
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
-      if (theme === 'compliance-light') {
-        document.documentElement.classList.add('compliance-mode');
-        document.body.classList.add('compliance-mode');
-      } else {
-        document.documentElement.classList.remove('compliance-mode');
-        document.body.classList.remove('compliance-mode');
-      }
+      document.documentElement.classList.remove('compliance-mode');
+      document.body.classList.remove('compliance-mode');
     }
-  }, [theme]);
-
-  const handleToggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'compliance-light' : 'dark'));
-  };
+  }, []);
 
   // Modals & Drawers State
   const [isStatutoryModalOpen, setIsStatutoryModalOpen] = useState(false);
@@ -403,6 +392,23 @@ export default function App() {
     });
   };
 
+  const handleClearAllFlags = () => {
+    setDevices((prev) =>
+      prev.map((d) =>
+        d.status === 'FLAGGED' || d.status === 'HOLD'
+          ? {
+              ...d,
+              status: 'ACCEPTED',
+              flagReason: undefined,
+              holdReason: undefined,
+              flagNotes: 'Batch cleared under Auditor Directorial Discretion (Quick Audit Actions)',
+              updatedAt: new Date().toLocaleString()
+            }
+          : d
+      )
+    );
+  };
+
   const handleResolveAlert = (alertId: string) => {
     setAlerts((prev) =>
       prev.map((a) => (a.id === alertId ? { ...a, resolved: true } : a))
@@ -542,8 +548,6 @@ export default function App() {
         onOpenChat={() => handleOpenChat()}
         onLogout={handleLogout}
         unreadAlertCount={unreadAlertCount}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
         onSyncOfflineDevice={handleSyncOfflineDevice}
       />
 
@@ -619,6 +623,7 @@ export default function App() {
                 currentUser={currentUser}
                 devices={devices}
                 onResolveFlag={(dId) => handleResolveFlag(dId)}
+                onClearAllFlags={handleClearAllFlags}
                 reminders={reminders}
                 onAddReminder={handleAddReminder}
                 onDeleteReminder={handleDeleteReminder}
