@@ -277,62 +277,99 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-        {/* Left Side: 3D Model & National Metrics */}
-        <div className="lg:col-span-6 flex flex-col justify-center space-y-5">
-          <div className="space-y-2.5">
+      <main className="flex-1 max-w-[1680px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-7 relative z-10 space-y-6">
+        {/* Top Hero Headline Banner - Aligns Both Cards Horizontally */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
+          <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
               <span>National Circular Economy Infrastructure</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
-              Collect. Wiping.<br />
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              Collect. Wiping.{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
-                Recycle & Certify.
+                Recycle &amp; Certify.
               </span>
             </h1>
-            <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
               India&apos;s unified digital chain of custody for electronic waste. Powered by NIST SP 800-88 cryptographic sanitization, AI Computer Vision intake sorting, and CPCB EPR statutory traceability.
             </p>
           </div>
 
-          {/* Interactive 3D Canvas Box */}
-          <div className="w-full bg-slate-900/60 border border-slate-800/80 rounded-2xl relative overflow-hidden backdrop-blur-md shadow-2xl p-2 group">
-            <div className="absolute top-3 left-4 z-10 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-[11px] font-mono font-medium text-slate-300 tracking-wider">
-                CIRCULAR MATRIX • 3D SPATIAL TELEMETRY
-              </span>
+          <div className="hidden lg:flex items-center gap-3 shrink-0 text-xs font-mono">
+            <div className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300">
+              <span className="text-slate-500 block text-[10px]">National Modelled</span>
+              <strong className="text-white">14.15 L MT</strong>
             </div>
-            <ThreeCanvas />
-            <div className="absolute bottom-3 inset-x-4 z-10 flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800/70">
-              <span>DRAG TO ROTATE 3D MOTHERBOARD CORE</span>
-              <span className="text-emerald-400 font-semibold">IEEE 2883-2022 ALIGNED</span>
+            <div className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300">
+              <span className="text-emerald-400/80 block text-[10px]">Recycled Tonnes</span>
+              <strong className="text-emerald-400">9.79 L MT (69.2%)</strong>
             </div>
-          </div>
-
-          {/* Official National Figures */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-medium">FY 25-26 Generated</div>
-              <div className="text-lg font-bold text-white mt-0.5">14.15 L MT</div>
-              <div className="text-[10px] text-slate-400">CPCB Modelled</div>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-medium">Processed Tonnes</div>
-              <div className="text-lg font-bold text-emerald-400 mt-0.5">9.79 L MT</div>
-              <div className="text-[10px] text-emerald-400/80">69.2% Recycled</div>
-            </div>
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="text-[11px] text-slate-400 font-medium">Data Scrub Level</div>
-              <div className="text-lg font-bold text-cyan-400 mt-0.5">NIST 800-88</div>
-              <div className="text-[10px] text-cyan-400/80">SHA-256 Verified</div>
+            <div className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300">
+              <span className="text-cyan-400/80 block text-[10px]">Data Purge</span>
+              <strong className="text-cyan-400">NIST SP 800-88</strong>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Role Selector & Login Console */}
-        <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl space-y-5">
+        {/* Symmetrical Dual-Console Grid - 3D Model and Credentials Aligned */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+          {/* Left Side: 3D Model Spatial Telemetry Card */}
+          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[580px] relative overflow-hidden group">
+            {/* Card Top Header - Mirroring the Access Portal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <h2 className="text-base font-bold text-white tracking-tight">
+                    Circular Matrix Spatial Twin
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Real-time 3D Motherboard Core • IEEE 2883-2022 Cryptographic Scrub
+                </p>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                ACTIVE TELEMETRY
+              </span>
+            </div>
+
+            {/* 3D Model Viewport */}
+            <div className="flex-1 w-full min-h-[360px] relative flex items-center justify-center my-3 bg-slate-950/40 rounded-2xl border border-slate-800/70 overflow-hidden">
+              <div className="absolute top-3 left-4 z-10 flex items-center gap-2 pointer-events-none">
+                <span className="text-[11px] font-mono font-semibold text-slate-300 tracking-wider">
+                  NIST SP 800-88 R2 CRYPTO MATRIX
+                </span>
+              </div>
+              <ThreeCanvas />
+              <div className="absolute bottom-3 inset-x-4 z-10 flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/85 px-3 py-1.5 rounded-lg border border-slate-800/80 pointer-events-none">
+                <span>DRAG TO ROTATE 3D MOTHERBOARD CORE</span>
+                <span className="text-emerald-400 font-semibold">IEEE 2883-2022 ALIGNED</span>
+              </div>
+            </div>
+
+            {/* National Metrics Footer Embedded Inside Left Card */}
+            <div className="grid grid-cols-3 gap-2.5 pt-1">
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 text-center">
+                <div className="text-[10px] text-slate-400 font-medium">FY 25-26 E-Waste</div>
+                <div className="text-sm sm:text-base font-bold text-white mt-0.5">14.15 L MT</div>
+                <div className="text-[9px] text-slate-500 font-mono">CPCB Modelled</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 text-center">
+                <div className="text-[10px] text-slate-400 font-medium">Processed Tonnes</div>
+                <div className="text-sm sm:text-base font-bold text-emerald-400 mt-0.5">9.79 L MT</div>
+                <div className="text-[9px] text-emerald-400/80 font-mono">69.2% Recycled</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 text-center">
+                <div className="text-[10px] text-slate-400 font-medium">Data Scrub Level</div>
+                <div className="text-sm sm:text-base font-bold text-cyan-400 mt-0.5">NIST 800-88</div>
+                <div className="text-[9px] text-cyan-400/80 font-mono">SHA-256 Verified</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Role Selector & Login Console */}
+          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[580px] space-y-5">
 
           {/* Main Navigation Tabs */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
@@ -796,7 +833,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             <span className="font-mono text-[10px]">Server: Asia-South1 (Mumbai)</span>
           </div>
         </div>
-      </main>
+      </div>
+    </main>
 
       {/* Web Authentication API / Biometric Passkey Modal */}
       {biometricModalOpen && (

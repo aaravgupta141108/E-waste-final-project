@@ -218,7 +218,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header role="banner" className="sticky top-0 z-40 w-full bg-slate-950/98 backdrop-blur-xl border-b border-slate-800/80 shadow-md">
-      <div className="w-full max-w-[1720px] mx-auto px-3 sm:px-5">
+      <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* ROW 1: Brand & Subtitle (Left) + Offline Status, Utility Action Icons & Persona Switcher (Right) */}
         <div className="flex items-center justify-between pt-2.5 pb-2 border-b border-slate-800/60 gap-3">

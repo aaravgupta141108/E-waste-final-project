@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Building2,
   Calendar,
@@ -456,93 +457,102 @@ export const AnnualAuditHistoryTable: React.FC<AnnualAuditHistoryTableProps> = (
                   </td>
                 </tr>
               ) : (
-                filteredHistory.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-slate-800/40 transition">
-                    {/* Hub Details */}
-                    <td className="py-3.5 px-3.5 align-top">
-                      <div className="font-bold text-white text-xs">{rec.hubName}</div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="font-mono text-[10px] text-purple-400 font-semibold">{rec.hubId}</span>
-                        <span className="text-slate-500">•</span>
-                        <span className="text-[11px] text-slate-400">{rec.state} ({rec.zone})</span>
-                      </div>
-                    </td>
+                <AnimatePresence mode="popLayout">
+                  {filteredHistory.map((rec, idx) => (
+                    <motion.tr
+                      key={rec.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.22, delay: Math.min(idx * 0.025, 0.35), ease: [0.16, 1, 0.3, 1] }}
+                      className="hover:bg-slate-800/40 transition"
+                    >
+                      {/* Hub Details */}
+                      <td className="py-3.5 px-3.5 align-top">
+                        <div className="font-bold text-white text-xs">{rec.hubName}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[10px] text-purple-400 font-semibold">{rec.hubId}</span>
+                          <span className="text-slate-500">•</span>
+                          <span className="text-[11px] text-slate-400">{rec.state} ({rec.zone})</span>
+                        </div>
+                      </td>
 
-                    {/* Audit Date & Cycle */}
-                    <td className="py-3.5 px-3 align-top whitespace-nowrap">
-                      <div className="font-bold text-slate-200 text-xs flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        <span>{rec.auditDate}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">{rec.auditPeriod}</span>
-                    </td>
+                      {/* Audit Date & Cycle */}
+                      <td className="py-3.5 px-3 align-top whitespace-nowrap">
+                        <div className="font-bold text-slate-200 text-xs flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{rec.auditDate}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">{rec.auditPeriod}</span>
+                      </td>
 
-                    {/* CPCB Verification ID */}
-                    <td className="py-3.5 px-3 align-top">
-                      <div className="flex items-center gap-1 font-mono text-xs font-semibold text-cyan-400">
-                        <span>{rec.cpcbVerificationId}</span>
-                        <button
-                          onClick={() => handleCopyId(rec.cpcbVerificationId)}
-                          className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white transition"
-                          title="Copy CPCB Verification ID"
-                        >
-                          {copiedId === rec.cpcbVerificationId ? (
-                            <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                      <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 inline-block mt-0.5 font-bold">
-                        CPCB PARIVESH SEALED
-                      </span>
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="py-3.5 px-3 align-top whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${getStatusBadge(rec.complianceStatus)}`}>
-                        {rec.complianceStatus === 'SHOW-CAUSE ISSUED' ? (
-                          <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
-                        ) : (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                        )}
-                        <span>{rec.complianceStatus}</span>
-                      </span>
-                      <div className="mt-1 font-mono text-[11px] font-bold text-slate-300">
-                        {rec.compliancePct.toFixed(1)}% Attainment
-                      </div>
-                    </td>
-
-                    {/* Audited Volume */}
-                    <td className="py-3.5 px-3 align-top font-mono text-xs">
-                      <div className="font-bold text-emerald-400">
-                        {rec.auditedIntakeMT} MT
-                      </div>
-                      <span className="text-[10px] text-slate-400">
-                        Target: {rec.statutoryTargetMT} MT
-                      </span>
-                    </td>
-
-                    {/* Weighbridge Cert */}
-                    <td className="py-3.5 px-3 align-top text-xs font-mono">
-                      <div className="flex items-center gap-1 text-slate-300">
-                        <Scale className="w-3 h-3 text-amber-400 shrink-0" />
-                        <span className="truncate max-w-[140px]" title={rec.weighbridgeCert}>
-                          {rec.weighbridgeCert}
+                      {/* CPCB Verification ID */}
+                      <td className="py-3.5 px-3 align-top">
+                        <div className="flex items-center gap-1 font-mono text-xs font-semibold text-cyan-400">
+                          <span>{rec.cpcbVerificationId}</span>
+                          <button
+                            onClick={() => handleCopyId(rec.cpcbVerificationId)}
+                            className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white transition"
+                            title="Copy CPCB Verification ID"
+                          >
+                            {copiedId === rec.cpcbVerificationId ? (
+                              <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                        <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 inline-block mt-0.5 font-bold">
+                          CPCB PARIVESH SEALED
                         </span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 block mt-0.5">IoT Calibrated</span>
-                    </td>
+                      </td>
 
-                    {/* Lead Auditor & Findings */}
-                    <td className="py-3.5 px-3.5 align-top text-xs font-sans max-w-xs">
-                      <div className="font-bold text-white text-xs">{rec.leadAuditor}</div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-                        {rec.auditFindings}
-                      </p>
-                    </td>
-                  </tr>
-                ))
+                      {/* Status Badge */}
+                      <td className="py-3.5 px-3 align-top whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${getStatusBadge(rec.complianceStatus)}`}>
+                          {rec.complianceStatus === 'SHOW-CAUSE ISSUED' ? (
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                          ) : (
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                          )}
+                          <span>{rec.complianceStatus}</span>
+                        </span>
+                        <div className="mt-1 font-mono tabular-nums text-[11px] font-bold text-slate-300">
+                          {rec.compliancePct.toFixed(1)}% Attainment
+                        </div>
+                      </td>
+
+                      {/* Audited Volume */}
+                      <td className="py-3.5 px-3 align-top font-mono tabular-nums text-xs">
+                        <div className="font-bold text-emerald-400">
+                          {rec.auditedIntakeMT} MT
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          Target: {rec.statutoryTargetMT} MT
+                        </span>
+                      </td>
+
+                      {/* Weighbridge Cert */}
+                      <td className="py-3.5 px-3 align-top text-xs font-mono">
+                        <div className="flex items-center gap-1 text-slate-300">
+                          <Scale className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span className="truncate max-w-[140px]" title={rec.weighbridgeCert}>
+                            {rec.weighbridgeCert}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 block mt-0.5">IoT Calibrated</span>
+                      </td>
+
+                      {/* Lead Auditor & Findings */}
+                      <td className="py-3.5 px-3.5 align-top text-xs font-sans max-w-xs">
+                        <div className="font-bold text-white text-xs">{rec.leadAuditor}</div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                          {rec.auditFindings}
+                        </p>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               )}
             </tbody>
           </table>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -14,8 +14,10 @@ import {
   Info,
   Calendar,
   Lock,
-  Download
+  Download,
+  Globe
 } from 'lucide-react';
+import L from 'leaflet';
 import { DeviceItem } from '../types';
 import { STATE_COMPLIANCE_DATA, StateComplianceData } from './ComplianceHeatmap';
 
@@ -25,6 +27,8 @@ export interface StateHubGeoNode {
   zone: 'North' | 'South' | 'West' | 'East' | 'Central';
   svgX: number; // SVG viewBox coordinate X (0-600)
   svgY: number; // SVG viewBox coordinate Y (0-680)
+  lat: number;
+  lng: number;
   capital: string;
   primaryFacility: string;
   weighbridgeCert: string;
@@ -34,36 +38,36 @@ export interface StateHubGeoNode {
 // 22 Key States & Union Territory Hubs across India mapped to geographic coordinates
 export const INDIA_GEO_HUBS: StateHubGeoNode[] = [
   // North
-  { code: 'DL', name: 'Delhi NCR', zone: 'North', svgX: 235, svgY: 230, capital: 'New Delhi', primaryFacility: 'Central Ingress Consolidation Mega Hub #01', weighbridgeCert: 'NABL-CAL-DEL-8821', leadAuditor: 'Dr. V. K. Sharma' },
-  { code: 'HR', name: 'Haryana', zone: 'North', svgX: 215, svgY: 220, capital: 'Gurugram', primaryFacility: 'Udyog Vihar Green Logistics Depot', weighbridgeCert: 'NABL-CAL-GGN-1049', leadAuditor: 'R. S. Hooda' },
-  { code: 'PB', name: 'Punjab', zone: 'North', svgX: 195, svgY: 195, capital: 'Ludhiana', primaryFacility: 'Ludhiana Demanufacturing Junction', weighbridgeCert: 'NABL-CAL-LDH-2201', leadAuditor: 'A. K. Singla' },
-  { code: 'RJ', name: 'Rajasthan', zone: 'North', svgX: 175, svgY: 280, capital: 'Jaipur', primaryFacility: 'Sitapura Industrial E-Waste Terminal', weighbridgeCert: 'NABL-CAL-JAI-4819', leadAuditor: 'Mahesh Meena' },
-  { code: 'UP', name: 'Uttar Pradesh', zone: 'North', svgX: 300, svgY: 265, capital: 'Noida / Lucknow', primaryFacility: 'Eco-Tech III Greater Noida Demanufacturing Yard', weighbridgeCert: 'NABL-CAL-NOI-9920', leadAuditor: 'Dr. K. N. Pandey' },
-  { code: 'UK', name: 'Uttarakhand', zone: 'North', svgX: 275, svgY: 200, capital: 'Dehradun', primaryFacility: 'SIDCUL Haridwar Green Hub', weighbridgeCert: 'NABL-CAL-DDN-4012', leadAuditor: 'S. Bhatt' },
-  { code: 'JK', name: 'Jammu & Kashmir', zone: 'North', svgX: 190, svgY: 120, capital: 'Srinagar / Jammu', primaryFacility: 'Bari Brahmana Recovery Node', weighbridgeCert: 'NABL-CAL-JAM-1102', leadAuditor: 'F. A. Mir' },
+  { code: 'DL', name: 'Delhi NCR', zone: 'North', svgX: 235, svgY: 230, lat: 28.6139, lng: 77.2090, capital: 'New Delhi', primaryFacility: 'Central Ingress Consolidation Mega Hub #01', weighbridgeCert: 'NABL-CAL-DEL-8821', leadAuditor: 'Dr. V. K. Sharma' },
+  { code: 'HR', name: 'Haryana', zone: 'North', svgX: 215, svgY: 220, lat: 28.4595, lng: 77.0266, capital: 'Gurugram', primaryFacility: 'Udyog Vihar Green Logistics Depot', weighbridgeCert: 'NABL-CAL-GGN-1049', leadAuditor: 'R. S. Hooda' },
+  { code: 'PB', name: 'Punjab', zone: 'North', svgX: 195, svgY: 195, lat: 30.9010, lng: 75.8573, capital: 'Ludhiana', primaryFacility: 'Ludhiana Demanufacturing Junction', weighbridgeCert: 'NABL-CAL-LDH-2201', leadAuditor: 'A. K. Singla' },
+  { code: 'RJ', name: 'Rajasthan', zone: 'North', svgX: 175, svgY: 280, lat: 26.9124, lng: 75.7873, capital: 'Jaipur', primaryFacility: 'Sitapura Industrial E-Waste Terminal', weighbridgeCert: 'NABL-CAL-JAI-4819', leadAuditor: 'Mahesh Meena' },
+  { code: 'UP', name: 'Uttar Pradesh', zone: 'North', svgX: 300, svgY: 265, lat: 28.5355, lng: 77.3910, capital: 'Noida / Lucknow', primaryFacility: 'Eco-Tech III Greater Noida Demanufacturing Yard', weighbridgeCert: 'NABL-CAL-NOI-9920', leadAuditor: 'Dr. K. N. Pandey' },
+  { code: 'UK', name: 'Uttarakhand', zone: 'North', svgX: 275, svgY: 200, lat: 30.3165, lng: 78.0322, capital: 'Dehradun', primaryFacility: 'SIDCUL Haridwar Green Hub', weighbridgeCert: 'NABL-CAL-DDN-4012', leadAuditor: 'S. Bhatt' },
+  { code: 'JK', name: 'Jammu & Kashmir', zone: 'North', svgX: 190, svgY: 120, lat: 32.7266, lng: 74.8570, capital: 'Srinagar / Jammu', primaryFacility: 'Bari Brahmana Recovery Node', weighbridgeCert: 'NABL-CAL-JAM-1102', leadAuditor: 'F. A. Mir' },
   
   // West
-  { code: 'MH', name: 'Maharashtra', zone: 'West', svgX: 210, svgY: 420, capital: 'Mumbai / Pune', primaryFacility: 'Taloja MIDC Urban Mining & Refinery Center', weighbridgeCert: 'NABL-CAL-BOM-7712', leadAuditor: 'Anand Kulkarni' },
-  { code: 'GJ', name: 'Gujarat', zone: 'West', svgX: 140, svgY: 340, capital: 'Ahmedabad / Surat', primaryFacility: 'Sanand CleanTech Industrial Park', weighbridgeCert: 'NABL-CAL-AMD-6604', leadAuditor: 'Hiren Patel' },
-  { code: 'GA', name: 'Goa', zone: 'West', svgX: 190, svgY: 510, capital: 'Panaji', primaryFacility: 'Kundaim Industrial Area Processing Node', weighbridgeCert: 'NABL-CAL-GOA-0811', leadAuditor: 'Maria D’Souza' },
+  { code: 'MH', name: 'Maharashtra', zone: 'West', svgX: 210, svgY: 420, lat: 19.0760, lng: 72.8777, capital: 'Mumbai / Pune', primaryFacility: 'Taloja MIDC Urban Mining & Refinery Center', weighbridgeCert: 'NABL-CAL-BOM-7712', leadAuditor: 'Anand Kulkarni' },
+  { code: 'GJ', name: 'Gujarat', zone: 'West', svgX: 140, svgY: 340, lat: 23.0225, lng: 72.5714, capital: 'Ahmedabad / Surat', primaryFacility: 'Sanand CleanTech Industrial Park', weighbridgeCert: 'NABL-CAL-AMD-6604', leadAuditor: 'Hiren Patel' },
+  { code: 'GA', name: 'Goa', zone: 'West', svgX: 190, svgY: 510, lat: 15.2993, lng: 74.1240, capital: 'Panaji', primaryFacility: 'Kundaim Industrial Area Processing Node', weighbridgeCert: 'NABL-CAL-GOA-0811', leadAuditor: 'Maria D’Souza' },
   
   // Central
-  { code: 'MP', name: 'Madhya Pradesh', zone: 'Central', svgX: 265, svgY: 350, capital: 'Indore / Bhopal', primaryFacility: 'Pithampur Clean Circular Hub #02', weighbridgeCert: 'NABL-CAL-IND-5542', leadAuditor: 'R. K. Verma' },
-  { code: 'CG', name: 'Chhattisgarh', zone: 'Central', svgX: 335, svgY: 380, capital: 'Raipur', primaryFacility: 'Urla Industrial Complex Recycling Node', weighbridgeCert: 'NABL-CAL-RAI-2319', leadAuditor: 'Sunil Netam' },
+  { code: 'MP', name: 'Madhya Pradesh', zone: 'Central', svgX: 265, svgY: 350, lat: 22.7196, lng: 75.8577, capital: 'Indore / Bhopal', primaryFacility: 'Pithampur Clean Circular Hub #02', weighbridgeCert: 'NABL-CAL-IND-5542', leadAuditor: 'R. K. Verma' },
+  { code: 'CG', name: 'Chhattisgarh', zone: 'Central', svgX: 335, svgY: 380, lat: 21.2514, lng: 81.6296, capital: 'Raipur', primaryFacility: 'Urla Industrial Complex Recycling Node', weighbridgeCert: 'NABL-CAL-RAI-2319', leadAuditor: 'Sunil Netam' },
   
   // East
-  { code: 'WB', name: 'West Bengal', zone: 'East', svgX: 420, svgY: 345, capital: 'Kolkata', primaryFacility: 'Kolkata Leather Complex E-Waste Hub #05', weighbridgeCert: 'NABL-CAL-CCU-3390', leadAuditor: 'Subhashish Roy' },
-  { code: 'BR', name: 'Bihar', zone: 'East', svgX: 375, svgY: 285, capital: 'Patna', primaryFacility: 'Patna Ganga Belt Collection Depot #01', weighbridgeCert: 'NABL-CAL-PAT-9014', leadAuditor: 'Manish Kumar' },
-  { code: 'OD', name: 'Odisha', zone: 'East', svgX: 385, svgY: 415, capital: 'Bhubaneswar', primaryFacility: 'Mancheswar Industrial Node', weighbridgeCert: 'NABL-CAL-BBI-1922', leadAuditor: 'P. K. Das' },
-  { code: 'JH', name: 'Jharkhand', zone: 'East', svgX: 375, svgY: 335, capital: 'Ranchi / Jamshedpur', primaryFacility: 'Gamharia Circular Technology Park', weighbridgeCert: 'NABL-CAL-JAM-4410', leadAuditor: 'B. Soren' },
-  { code: 'AS', name: 'Assam', zone: 'East', svgX: 510, svgY: 260, capital: 'Guwahati', primaryFacility: 'North-East Brahmaputra Eco Hub', weighbridgeCert: 'NABL-CAL-GAU-1029', leadAuditor: 'Pranab Saikia' },
+  { code: 'WB', name: 'West Bengal', zone: 'East', svgX: 420, svgY: 345, lat: 22.5726, lng: 88.3639, capital: 'Kolkata', primaryFacility: 'Kolkata Leather Complex E-Waste Hub #05', weighbridgeCert: 'NABL-CAL-CCU-3390', leadAuditor: 'Subhashish Roy' },
+  { code: 'BR', name: 'Bihar', zone: 'East', svgX: 375, svgY: 285, lat: 25.5941, lng: 85.1376, capital: 'Patna', primaryFacility: 'Patna Ganga Belt Collection Depot #01', weighbridgeCert: 'NABL-CAL-PAT-9014', leadAuditor: 'Manish Kumar' },
+  { code: 'OD', name: 'Odisha', zone: 'East', svgX: 385, svgY: 415, lat: 20.2961, lng: 85.8245, capital: 'Bhubaneswar', primaryFacility: 'Mancheswar Industrial Node', weighbridgeCert: 'NABL-CAL-BBI-1922', leadAuditor: 'P. K. Das' },
+  { code: 'JH', name: 'Jharkhand', zone: 'East', svgX: 375, svgY: 335, lat: 23.3441, lng: 85.3096, capital: 'Ranchi / Jamshedpur', primaryFacility: 'Gamharia Circular Technology Park', weighbridgeCert: 'NABL-CAL-JAM-4410', leadAuditor: 'B. Soren' },
+  { code: 'AS', name: 'Assam', zone: 'East', svgX: 510, svgY: 260, lat: 26.1445, lng: 91.7362, capital: 'Guwahati', primaryFacility: 'North-East Brahmaputra Eco Hub', weighbridgeCert: 'NABL-CAL-GAU-1029', leadAuditor: 'Pranab Saikia' },
 
   // South
-  { code: 'KA', name: 'Karnataka', zone: 'South', svgX: 215, svgY: 530, capital: 'Bengaluru', primaryFacility: 'Electronic City E-Waste Ingress Hub #04', weighbridgeCert: 'NABL-CAL-BLR-9042', leadAuditor: 'S. Ramanathan' },
-  { code: 'TN', name: 'Tamil Nadu', zone: 'South', svgX: 255, svgY: 590, capital: 'Chennai / Coimbatore', primaryFacility: 'Sriperumbudur High-Tech Asset Recovery Terminal', weighbridgeCert: 'NABL-CAL-MAA-4108', leadAuditor: 'M. Jayachandran' },
-  { code: 'TG', name: 'Telangana', zone: 'South', svgX: 260, svgY: 460, capital: 'Hyderabad', primaryFacility: 'Patancheru Eco Zone Demanufacturing Plant', weighbridgeCert: 'NABL-CAL-HYD-8840', leadAuditor: 'N. Venkat Rao' },
-  { code: 'AP', name: 'Andhra Pradesh', zone: 'South', svgX: 280, svgY: 515, capital: 'Visakhapatnam', primaryFacility: 'Atchutapuram Industrial Cluster', weighbridgeCert: 'NABL-CAL-VTZ-3312', leadAuditor: 'K. S. Reddy' },
-  { code: 'KL', name: 'Kerala', zone: 'South', svgX: 210, svgY: 620, capital: 'Kochi / Thiruvananthapuram', primaryFacility: 'KINFRA Clean Tech E-Waste Park', weighbridgeCert: 'NABL-CAL-COK-7719', leadAuditor: 'George Thomas' }
+  { code: 'KA', name: 'Karnataka', zone: 'South', svgX: 215, svgY: 530, lat: 12.9716, lng: 77.5946, capital: 'Bengaluru', primaryFacility: 'Electronic City E-Waste Ingress Hub #04', weighbridgeCert: 'NABL-CAL-BLR-9042', leadAuditor: 'S. Ramanathan' },
+  { code: 'TN', name: 'Tamil Nadu', zone: 'South', svgX: 255, svgY: 590, lat: 13.0827, lng: 80.2707, capital: 'Chennai / Coimbatore', primaryFacility: 'Sriperumbudur High-Tech Asset Recovery Terminal', weighbridgeCert: 'NABL-CAL-MAA-4108', leadAuditor: 'M. Jayachandran' },
+  { code: 'TG', name: 'Telangana', zone: 'South', svgX: 260, svgY: 460, lat: 17.3850, lng: 78.4867, capital: 'Hyderabad', primaryFacility: 'Patancheru Eco Zone Demanufacturing Plant', weighbridgeCert: 'NABL-CAL-HYD-8840', leadAuditor: 'N. Venkat Rao' },
+  { code: 'AP', name: 'Andhra Pradesh', zone: 'South', svgX: 280, svgY: 515, lat: 17.6868, lng: 83.2185, capital: 'Visakhapatnam', primaryFacility: 'Atchutapuram Industrial Cluster', weighbridgeCert: 'NABL-CAL-VTZ-3312', leadAuditor: 'K. S. Reddy' },
+  { code: 'KL', name: 'Kerala', zone: 'South', svgX: 210, svgY: 620, lat: 9.9312, lng: 76.2673, capital: 'Kochi / Thiruvananthapuram', primaryFacility: 'KINFRA Clean Tech E-Waste Park', weighbridgeCert: 'NABL-CAL-COK-7719', leadAuditor: 'George Thomas' }
 ];
 
 export interface ComputedStateHubRisk {
@@ -89,6 +93,17 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
   const [filterMode, setFilterMode] = useState<'all' | 'high_risk' | 'certified'>('all');
   const [selectedHubCode, setSelectedHubCode] = useState<string>('DL');
   const [hoveredHub, setHoveredHub] = useState<ComputedStateHubRisk | null>(null);
+  const [mapViewMode, setMapViewMode] = useState<'carto_gis' | 'vector_blueprint'>('carto_gis');
+
+  // Leaflet CARTO Voyager & Dark Vector Tile Refs
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const voyagerTileLayerRef = useRef<L.TileLayer | null>(null);
+  const darkVectorTileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Authenticated CARTO Voyager key provided by user
+  const cartoApiKey = 'cb1_4sqy_1_15a3fad41d4a776cdaf03ad0';
 
   // Dynamically compute High-Risk vs Compliance-Certified hubs based on device data & state stats
   const computedHubs: ComputedStateHubRisk[] = useMemo(() => {
@@ -144,7 +159,7 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
         geo,
         complianceData,
         isHighRisk,
-        totalDevicesCount: Math.max(matchedDevices.length, Math.floor(Math.random() * 20 + 15)),
+        totalDevicesCount: Math.max(matchedDevices.length, 18),
         flaggedDevicesCount: flaggedDevices.length,
         collectionRatePct: collectionRate,
         riskRating: isHighRisk ? 'HIGH_RISK' : 'COMPLIANCE_CERTIFIED',
@@ -169,6 +184,177 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
   const activeHubDetails = useMemo(() => {
     return computedHubs.find((h) => h.geo.code === selectedHubCode) || computedHubs[0];
   }, [computedHubs, selectedHubCode]);
+
+  // Initialize Leaflet Map once with hardware acceleration (preferCanvas: true, zero lag)
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        center: [22.8, 79.5],
+        zoom: 4.8,
+        minZoom: 4,
+        maxZoom: 18,
+        zoomControl: false,
+        attributionControl: false,
+        preferCanvas: true
+      });
+
+      // 1. CARTO Voyager Raster Tiles Layer (Clean national GIS)
+      const voyagerUrl = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoApiKey}`;
+      const voyagerLayer = L.tileLayer(voyagerUrl, {
+        maxZoom: 19,
+        attribution: 'Leaflet | CARTO Voyager © OpenStreetMap'
+      });
+      voyagerTileLayerRef.current = voyagerLayer;
+
+      // 2. CARTO Dark Matter Raster Tiles Layer (Dark ops vector blueprint styling)
+      const darkUrl = `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${cartoApiKey}`;
+      const darkLayer = L.tileLayer(darkUrl, {
+        maxZoom: 19,
+        attribution: 'Leaflet | CARTO Dark Matter © OpenStreetMap'
+      });
+      darkVectorTileLayerRef.current = darkLayer;
+
+      // Add default tile layer
+      if (mapViewMode === 'carto_gis') {
+        voyagerLayer.addTo(map);
+      } else {
+        darkLayer.addTo(map);
+      }
+
+      const markersGroup = L.layerGroup().addTo(map);
+      markersLayerRef.current = markersGroup;
+      mapInstanceRef.current = map;
+
+      requestAnimationFrame(() => {
+        map.invalidateSize();
+      });
+    }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        voyagerTileLayerRef.current = null;
+        darkVectorTileLayerRef.current = null;
+        markersLayerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Smoothly swap tile layers without re-instantiating the map or dropping frames
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const voyagerLayer = voyagerTileLayerRef.current;
+    const darkLayer = darkVectorTileLayerRef.current;
+
+    if (mapViewMode === 'carto_gis') {
+      if (darkLayer && map.hasLayer(darkLayer)) {
+        map.removeLayer(darkLayer);
+      }
+      if (voyagerLayer && !map.hasLayer(voyagerLayer)) {
+        voyagerLayer.addTo(map);
+      }
+    } else {
+      if (voyagerLayer && map.hasLayer(voyagerLayer)) {
+        map.removeLayer(voyagerLayer);
+      }
+      if (darkLayer && !map.hasLayer(darkLayer)) {
+        darkLayer.addTo(map);
+      }
+    }
+
+    map.invalidateSize();
+  }, [mapViewMode]);
+
+  // Refresh markers based on displayed hubs with hardware-accelerated styling (zero lag)
+  useEffect(() => {
+    if (!markersLayerRef.current || !mapInstanceRef.current) return;
+
+    markersLayerRef.current.clearLayers();
+
+    displayedHubs.forEach((hub) => {
+      const isSelected = selectedHubCode === hub.geo.code;
+      const isHighRisk = hub.isHighRisk;
+
+      const markerHtml = `
+        <div class="relative flex items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none">
+          ${
+            isHighRisk
+              ? '<span class="absolute w-7 h-7 rounded-full bg-rose-500/40 pointer-events-none" style="animation: pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;"></span>'
+              : ''
+          }
+          <div class="relative w-6 h-6 rounded-full flex items-center justify-center font-mono font-bold text-[9px] shadow-lg transition-transform duration-150 ${
+            isHighRisk
+              ? 'bg-rose-950 text-rose-300 border-2 border-rose-500 hover:scale-110'
+              : 'bg-emerald-950 text-emerald-300 border-2 border-emerald-400 hover:scale-110'
+          } ${isSelected ? 'ring-4 ring-purple-500 scale-125 z-30' : 'z-10'}">
+            <span>${hub.geo.code}</span>
+          </div>
+        </div>
+      `;
+
+      const customIcon = L.divIcon({
+        className: 'hub-pin-marker',
+        html: markerHtml,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+
+      const marker = L.marker([hub.geo.lat, hub.geo.lng], { icon: customIcon });
+
+      const popupHtml = `
+        <div style="font-family: Satoshi, sans-serif; min-width: 210px; color: #f8fafc; padding: 4px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px;">
+            <strong style="color: #ffffff; font-size: 12px;">${hub.geo.name} (${hub.geo.code})</strong>
+            <span style="font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 9999px; background: ${
+              hub.isHighRisk ? 'rgba(244,63,94,0.2)' : 'rgba(16,185,129,0.2)'
+            }; color: ${hub.isHighRisk ? '#fb7185' : '#34d399'}; border: 1px solid ${
+              hub.isHighRisk ? 'rgba(244,63,94,0.4)' : 'rgba(16,185,129,0.4)'
+            };">${hub.riskRating === 'HIGH_RISK' ? 'HIGH RISK' : 'CERTIFIED'}</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.45; color: #cbd5e1; font-family: monospace;">
+            <div>Target Quota: <strong>${hub.complianceData?.statutoryTargetMT || 400} MT</strong></div>
+            <div>Actual Intake: <strong style="color: ${hub.isHighRisk ? '#fb7185' : '#34d399'};">${hub.complianceData?.actualCollectedMT || 380} MT (${hub.collectionRatePct.toFixed(1)}%)</strong></div>
+            <div>Calibration: <span style="color: #94a3b8;">${hub.geo.weighbridgeCert}</span></div>
+            <div>Lead Auditor: <span style="color: #cbd5e1;">${hub.geo.leadAuditor}</span></div>
+          </div>
+        </div>
+      `;
+
+      marker.bindPopup(popupHtml, { closeButton: false, className: 'custom-leaflet-popup' });
+
+      marker.on('click', () => {
+        setSelectedHubCode(hub.geo.code);
+        if (hub.complianceData && onSelectState) {
+          onSelectState(hub.complianceData);
+        }
+      });
+
+      markersLayerRef.current?.addLayer(marker);
+    });
+  }, [displayedHubs, selectedHubCode, onSelectState]);
+
+  const handleResetMapViewport = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([22.8, 79.5], 4.8);
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.zoomIn();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.zoomOut();
+    }
+  };
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
@@ -239,10 +425,10 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
 
       {/* Main Geography Map & Details Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Side (Col 7): Interactive Geography-based SVG Map of India */}
+        {/* Left Side (Col 7): Interactive Geography-based Map (CARTO Voyager / SVG Blueprint) */}
         <div className="lg:col-span-7 bg-slate-950 rounded-2xl border border-slate-800 p-4 relative overflow-hidden flex flex-col items-center shadow-inner min-h-[460px]">
-          {/* Legend and Scanner Overlay */}
-          <div className="w-full flex items-center justify-between text-xs pb-2 border-b border-slate-800/80 mb-2">
+          {/* View Mode Toggle & Legend */}
+          <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs pb-3 border-b border-slate-800/80 mb-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
@@ -253,161 +439,106 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
                 <span className="text-[11px] font-semibold text-rose-400">High-Risk Discrepancy</span>
               </div>
             </div>
-            <span className="text-[10px] font-mono text-slate-500">Click any hub node to inspect</span>
+
+            {/* Switcher: CARTO Voyager Raster Tiles vs Vector Blueprint */}
+            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setMapViewMode('carto_gis')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                  mapViewMode === 'carto_gis'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="View with CARTO Voyager raster tiles (API Key: cb1_4sqy_1_15a3fad41d4a776cdaf03ad0)"
+              >
+                <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                <span>CARTO Voyager GIS</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapViewMode('vector_blueprint')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                  mapViewMode === 'vector_blueprint'
+                    ? 'bg-purple-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="View high-contrast vector topological grid"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>Vector Grid</span>
+              </button>
+            </div>
           </div>
 
-          {/* SVG Map Canvas */}
-          <div className="w-full max-w-[520px] aspect-[520/540] relative">
-            <svg
-              viewBox="80 70 480 600"
-              className="w-full h-full filter drop-shadow-md select-none"
-            >
-              <defs>
-                {/* Radial Glows */}
-                <radialGradient id="highRiskGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
-                </radialGradient>
-                <radialGradient id="certifiedGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                </radialGradient>
-              </defs>
+          {/* Interactive GIS & Vector Grid Map Container - Permanently mounted for 60 FPS zero-lag navigation */}
+          <div className="w-full relative">
+            <div
+              ref={mapContainerRef}
+              className={`w-full h-[540px] rounded-xl overflow-hidden border border-slate-800 z-0 relative shadow-inner ${
+                mapViewMode === 'carto_gis'
+                  ? 'brightness-[0.92] contrast-[1.08]'
+                  : 'brightness-[0.88] contrast-[1.15]'
+              }`}
+            />
 
-              {/* Simplified Geometric Continental Outline of India */}
-              <path
-                d="M 195 95 L 235 90 L 265 140 L 290 190 L 370 240 L 460 250 L 530 240 L 545 285 L 490 310 L 440 330 L 415 390 L 350 490 L 275 640 L 235 650 L 195 560 L 175 450 L 125 360 L 140 300 L 165 240 Z"
-                fill="none"
-                stroke="#334155"
-                strokeWidth="1.5"
-                strokeDasharray="4 4"
-                className="opacity-40"
-              />
+            {/* Tactical Vector Grid Overlay (When in Vector Grid Mode) */}
+            {mapViewMode === 'vector_blueprint' && (
+              <div className="absolute inset-0 z-10 pointer-events-none rounded-xl overflow-hidden">
+                {/* Blueprint Grid Lines */}
+                <div className="absolute inset-0 bg-[radial-gradient(#38bdf825_1px,transparent_1px)] [background-size:24px_24px] opacity-70" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#0ea5e910_1px,transparent_1px),linear-gradient(to_bottom,#0ea5e910_1px,transparent_1px)] [background-size:96px_96px] opacity-40" />
 
-              {/* Inter-State Logistics Transit Corridor Vectors */}
-              <g stroke="#475569" strokeWidth="1" strokeDasharray="2 3" opacity="0.35">
-                <line x1="235" y1="230" x2="210" y2="420" /> {/* Delhi - Mumbai */}
-                <line x1="235" y1="230" x2="420" y2="345" /> {/* Delhi - Kolkata */}
-                <line x1="210" y1="420" x2="215" y2="530" /> {/* Mumbai - Bangalore */}
-                <line x1="215" y1="530" x2="255" y2="590" /> {/* Bangalore - Chennai */}
-                <line x1="260" y1="460" x2="255" y2="590" /> {/* Hyderabad - Chennai */}
-                <line x1="265" y1="350" x2="235" y2="230" /> {/* Indore - Delhi */}
-                <line x1="140" y1="340" x2="210" y2="420" /> {/* Ahmedabad - Mumbai */}
-              </g>
-
-              {/* State Hub Nodes Render */}
-              {displayedHubs.map((hub) => {
-                const isSelected = selectedHubCode === hub.geo.code;
-                const isHovered = hoveredHub?.geo.code === hub.geo.code;
-                const pinColor = hub.isHighRisk ? '#f43f5e' : '#10b981';
-                const pulseRingColor = hub.isHighRisk ? '#e11d48' : '#059669';
-
-                return (
-                  <g
-                    key={hub.geo.code}
-                    className="cursor-pointer transition-transform duration-150"
-                    onClick={() => {
-                      setSelectedHubCode(hub.geo.code);
-                      if (hub.complianceData && onSelectState) {
-                        onSelectState(hub.complianceData);
-                      }
-                    }}
-                    onMouseEnter={() => setHoveredHub(hub)}
-                    onMouseLeave={() => setHoveredHub(null)}
-                  >
-                    {/* Pulsing ring for High-Risk hubs */}
-                    {hub.isHighRisk && (
-                      <circle
-                        cx={hub.geo.svgX}
-                        cy={hub.geo.svgY}
-                        r="14"
-                        fill="none"
-                        stroke={pulseRingColor}
-                        strokeWidth="1.5"
-                        opacity="0.6"
-                        className="animate-ping"
-                      />
-                    )}
-
-                    {/* Selection halo */}
-                    {isSelected && (
-                      <circle
-                        cx={hub.geo.svgX}
-                        cy={hub.geo.svgY}
-                        r="16"
-                        fill="none"
-                        stroke="#a855f7"
-                        strokeWidth="2.5"
-                        strokeDasharray="3 3"
-                      />
-                    )}
-
-                    {/* Outer Glow */}
-                    <circle
-                      cx={hub.geo.svgX}
-                      cy={hub.geo.svgY}
-                      r="10"
-                      fill={hub.isHighRisk ? 'url(#highRiskGlow)' : 'url(#certifiedGlow)'}
-                    />
-
-                    {/* Center Marker Point */}
-                    <circle
-                      cx={hub.geo.svgX}
-                      cy={hub.geo.svgY}
-                      r={isSelected ? "6" : "5"}
-                      fill={pinColor}
-                      stroke="#ffffff"
-                      strokeWidth="1.5"
-                    />
-
-                    {/* Label Badge */}
-                    <text
-                      x={hub.geo.svgX}
-                      y={hub.geo.svgY - 9}
-                      textAnchor="middle"
-                      fontSize="9"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                      fill={isSelected ? '#ffffff' : hub.isHighRisk ? '#fda4af' : '#a7f3d0'}
-                      className="pointer-events-none drop-shadow"
-                    >
-                      {hub.geo.code}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-
-            {/* Hover Tooltip Overlay */}
-            {hoveredHub && (
-              <div
-                className="absolute pointer-events-none z-30 p-2.5 rounded-xl bg-slate-950/95 border border-purple-500/50 shadow-2xl text-xs space-y-1 transform -translate-x-1/2 -translate-y-full"
-                style={{
-                  left: `${((hoveredHub.geo.svgX - 80) / 480) * 100}%`,
-                  top: `${((hoveredHub.geo.svgY - 70) / 600) * 100 - 4}%`
-                }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      hoveredHub.isHighRisk ? 'bg-rose-500' : 'bg-emerald-500'
-                    }`}
-                  />
-                  <strong className="text-white">{hoveredHub.geo.name}</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">({hoveredHub.geo.zone})</span>
+                {/* Tactical Corner Crosshairs */}
+                <div className="absolute top-3 left-3 text-[9px] font-mono text-cyan-400/80 bg-slate-950/80 px-2 py-1 rounded border border-cyan-800/60 backdrop-blur-sm">
+                  <span>LAT 37°06&apos;N - 08°04&apos;N | LON 68°07&apos;E - 97°25&apos;E</span>
                 </div>
-                <div className="text-[11px] font-mono">
-                  Quota: <strong style={{ color: hoveredHub.isHighRisk ? '#f43f5e' : '#10b981' }}>
-                    {hoveredHub.collectionRatePct.toFixed(1)}%
-                  </strong>
-                  {hoveredHub.flaggedDevicesCount > 0 && (
-                    <span className="text-rose-400 ml-2 font-bold">
-                      {hoveredHub.flaggedDevicesCount} Flagged
-                    </span>
-                  )}
+                <div className="absolute top-3 right-3 text-[9px] font-mono text-purple-300/80 bg-slate-950/80 px-2 py-1 rounded border border-purple-800/60 backdrop-blur-sm">
+                  <span>VECTOR TOPOLOGY MATRIX</span>
                 </div>
               </div>
             )}
+
+            {/* Bottom Status & Key Attribution Bar */}
+            <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2">
+              <div className="bg-slate-950/90 border border-slate-800 px-2.5 py-1.5 rounded-lg text-[10px] font-mono text-slate-300 backdrop-blur-md shadow-lg flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  {mapViewMode === 'carto_gis' ? 'CARTO Voyager GIS' : 'CARTO Dark Vector Matrix'} • Key:{' '}
+                  <strong className="text-cyan-400">cb1_4sqy...3ad0</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Map Navigation Controls (Zoom In, Zoom Out, Pan-India Recenter) */}
+            <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-slate-950/90 border border-slate-800 p-1 rounded-xl backdrop-blur-md shadow-lg">
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                className="w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center justify-center text-sm font-bold transition border border-slate-800"
+                title="Zoom in"
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                className="w-7 h-7 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center justify-center text-sm font-bold transition border border-slate-800"
+                title="Zoom out"
+                aria-label="Zoom out"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={handleResetMapViewport}
+                className="px-2 h-7 rounded-lg bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white text-[10px] font-mono font-bold transition border border-purple-800 flex items-center gap-1"
+                title="Reset to Pan-India view"
+              >
+                Reset
+              </button>
+            </div>
           </div>
 
           <div className="w-full flex items-center justify-between text-[11px] text-slate-400 font-mono pt-3 border-t border-slate-800/80">

@@ -1432,10 +1432,11 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                   </select>
                 </div>
 
+                {/* Serial Number with Camera QR / Barcode Scanner */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-semibold text-slate-300">
-                      Serial Number or IMEI (Optional)
+                      Serial Number (S/N) *
                     </label>
                     <div className="flex items-center gap-2">
                       <button
@@ -1444,8 +1445,8 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                         className="text-[11px] text-teal-400 hover:text-teal-300 flex items-center gap-1 font-semibold transition"
                         title="Scan serial barcode with camera"
                       >
-                        <Barcode className="w-3 h-3" />
-                        <span>Scan Barcode</span>
+                        <Barcode className="w-3.5 h-3.5" />
+                        <span>Scan Camera</span>
                       </button>
                       <span className="text-slate-600">|</span>
                       <button
@@ -1454,21 +1455,53 @@ export const CitizenPortalView: React.FC<CitizenPortalViewProps> = ({
                         className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold transition"
                         title="Scan QR tag with camera"
                       >
-                        <Camera className="w-3 h-3" />
+                        <Camera className="w-3.5 h-3.5" />
                         <span>Scan QR</span>
                       </button>
                     </div>
                   </div>
                   <input
                     type="text"
-                    placeholder="Enter serial or scan tag (e.g. SN-8849102)"
+                    required
+                    placeholder="e.g. SN-8849102 or scan tag"
                     value={formSerial}
                     onChange={(e) => setFormSerial(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono tracking-wide"
                   />
                   <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-emerald-400" />
-                    <span>Tip: Scanning the serial barcode on the device back auto-locks maximum EPR scrap valuation.</span>
+                    <span>Camera auto-fills serial and locks official CPCB valuation benchmark.</span>
+                  </p>
+                </div>
+
+                {/* IMEI / Cellular TAC (Mandatory for Smartphones / Cellular Hardware) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <span>IMEI / Cellular TAC</span>
+                      <span className="text-[10px] text-cyan-400 font-mono">(15 Digits)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsBarcodeScannerOpen(true)}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-semibold transition"
+                      title="Scan chassis / box barcode with camera to auto-fill IMEI"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Scan Camera IMEI</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. 864920048192837 (or auto-filled via camera)"
+                    value={formImei}
+                    onChange={(e) => setFormImei(e.target.value)}
+                    maxLength={15}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono tracking-wider"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-cyan-400" />
+                    <span>Cross-referenced against DoT Sanchar Saathi national CEIR registry.</span>
                   </p>
                 </div>
               </div>

@@ -555,7 +555,7 @@ export default function App() {
       <main
         id="main-content"
         role="main"
-        className={`flex-1 w-full ${activeTab === 'fleet' ? 'max-w-[1720px] mx-auto px-2 sm:px-4 py-2' : 'max-w-7xl xl:max-w-[1700px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'}`}
+        className={`flex-1 w-full ${activeTab === 'fleet' ? 'max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-4' : 'max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'}`}
       >
         {/* Role-Based Access Gate if unauthorized tab is navigated */}
         {!isTabAllowed ? (
@@ -672,8 +672,8 @@ export default function App() {
       </main>
 
       {/* Footer Notice */}
-      <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">
-        <div className="w-full max-w-7xl xl:max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="border-t border-slate-800/80 bg-slate-950 py-5 px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
+        <div className="w-full max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <span>
             Bharat E-Waste Hub • Central Pollution Control Board (CPCB) & MoEFCC Statutory Governance Node
           </span>

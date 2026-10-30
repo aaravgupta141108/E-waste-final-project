@@ -26,8 +26,15 @@ import {
   ArrowRight,
   Smartphone,
   Zap,
-  BellRing
+  BellRing,
+  Laptop,
+  Cpu,
+  Eye,
+  SlidersHorizontal,
+  RotateCcw,
+  Shield
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { AUDIT_LOGS, CPCB_RECYCLERS, NATIONAL_STATS } from '../data/mockData';
 import { ComplianceDeadlineReminder, AuditLogEntry, DeviceItem, UserProfile } from '../types';
@@ -41,6 +48,7 @@ import { ImeiDeviceLookupCard } from '../components/ImeiDeviceLookupCard';
 import { RegionalSparklineChart } from '../components/RegionalSparklineChart';
 import { AnnualAuditHistoryTable } from '../components/AnnualAuditHistoryTable';
 import { CpcbForm6AuditReportModal } from '../components/CpcbForm6AuditReportModal';
+import { AuditorSignedDeviceListPdfModal } from '../components/AuditorSignedDeviceListPdfModal';
 import { DigitalAuditTrailModal, getStoredOverrides, saveStoredOverride, AuditorOverrideRecord } from '../components/DigitalAuditTrailModal';
 import { NationalHubRiskMap } from '../components/NationalHubRiskMap';
 import { ComplianceAiInsightPanel } from '../components/ComplianceAiInsightPanel';
@@ -92,6 +100,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
   const [showAnnualReportModal, setShowAnnualReportModal] = useState(false);
   const [showForm6Modal, setShowForm6Modal] = useState(false);
+  const [showSignedDeviceListModal, setShowSignedDeviceListModal] = useState(false);
   const [showDigitalAuditTrailModal, setShowDigitalAuditTrailModal] = useState(false);
   const [showBulkNotifyModal, setShowBulkNotifyModal] = useState(false);
   const [showQuarterlySummaryModal, setShowQuarterlySummaryModal] = useState(false);
@@ -102,6 +111,123 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [complianceSearch, setComplianceSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<'all' | 'intake' | 'ceir' | 'wipe' | 'scale' | 'payout' | 'intervention' | 'audit'>('all');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+
+  // Dedicated Device Status & Chain-of-Custody Table State
+  const [deviceStatusFilter, setDeviceStatusFilter] = useState<'ALL' | 'FLAGGED' | 'HOLD' | 'PURGED_NIST' | 'INTAKE' | 'TRANSIT' | 'CERTIFIED'>('ALL');
+  const [deviceSearchTerm, setDeviceSearchTerm] = useState('');
+  const [deviceCategoryFilter, setDeviceCategoryFilter] = useState('ALL');
+  const [deviceSortField, setDeviceSortField] = useState<'id' | 'weight' | 'co2' | 'status'>('id');
+  const [deviceSortOrder, setDeviceSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [inspectingDevice, setInspectingDevice] = useState<DeviceItem | null>(null);
+  const [copiedDeviceId, setCopiedDeviceId] = useState<string | null>(null);
+
+  const deviceCategories = useMemo(() => {
+    return Array.from(new Set(devices.map((d) => d.category)));
+  }, [devices]);
+
+  const filteredAuditorDevices = useMemo(() => {
+    return devices
+      .filter((device) => {
+        // Status filter
+        if (deviceStatusFilter === 'FLAGGED' && device.status !== 'FLAGGED') return false;
+        if (deviceStatusFilter === 'HOLD' && device.status !== 'HOLD') return false;
+        if (deviceStatusFilter === 'PURGED_NIST' && device.status !== 'WIPE_VERIFIED' && !device.wipeRecord) return false;
+        if (deviceStatusFilter === 'INTAKE' && device.status !== 'REGISTERED' && device.status !== 'DETAILS_CONFIRMED' && device.status !== 'ACCEPTED') return false;
+        if (deviceStatusFilter === 'TRANSIT' && device.status !== 'READY_FOR_DISPATCH' && device.status !== 'FACTORY_INSPECTION') return false;
+        if (deviceStatusFilter === 'CERTIFIED' && device.status !== 'CERTIFIED' && device.status !== 'RECYCLED') return false;
+
+        // Category filter
+        if (deviceCategoryFilter !== 'ALL' && device.category !== deviceCategoryFilter) return false;
+
+        // Search query
+        if (deviceSearchTerm.trim()) {
+          const q = deviceSearchTerm.toLowerCase();
+          const matches =
+            device.id.toLowerCase().includes(q) ||
+            device.brand.toLowerCase().includes(q) ||
+            device.model.toLowerCase().includes(q) ||
+            (device.serialNumber && device.serialNumber.toLowerCase().includes(q)) ||
+            (device.imei && device.imei.toLowerCase().includes(q)) ||
+            (device.userName && device.userName.toLowerCase().includes(q)) ||
+            (device.hubLocation && device.hubLocation.toLowerCase().includes(q));
+          if (!matches) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (deviceSortField === 'weight') {
+          return deviceSortOrder === 'asc' ? a.intakeWeightKg - b.intakeWeightKg : b.intakeWeightKg - a.intakeWeightKg;
+        }
+        if (deviceSortField === 'co2') {
+          return deviceSortOrder === 'asc' ? (a.co2SavedKg || 0) - (b.co2SavedKg || 0) : (b.co2SavedKg || 0) - (a.co2SavedKg || 0);
+        }
+        if (deviceSortField === 'status') {
+          return deviceSortOrder === 'asc' ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+        }
+        return deviceSortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+      });
+  }, [devices, deviceStatusFilter, deviceCategoryFilter, deviceSearchTerm, deviceSortField, deviceSortOrder]);
+
+  const getDeviceStatusBadge = (status: DeviceItem['status']) => {
+    switch (status) {
+      case 'CERTIFIED':
+      case 'RECYCLED':
+        return {
+          label: status === 'CERTIFIED' ? 'CPCB Certified' : 'Recycled Final',
+          className: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+        };
+      case 'WIPE_VERIFIED':
+        return {
+          label: 'NIST Purged',
+          className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+        };
+      case 'WIPING':
+        return {
+          label: 'Wiping in Progress',
+          className: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+        };
+      case 'FLAGGED':
+        return {
+          label: 'Quarantined',
+          className: 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+        };
+      case 'HOLD':
+        return {
+          label: 'Audit Hold',
+          className: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+        };
+      case 'READY_FOR_DISPATCH':
+      case 'FACTORY_INSPECTION':
+        return {
+          label: status === 'READY_FOR_DISPATCH' ? 'Ready Dispatch' : 'Factory Inspection',
+          className: 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+        };
+      case 'ACCEPTED':
+      case 'DETAILS_CONFIRMED':
+        return {
+          label: 'Intake Verified',
+          className: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+        };
+      case 'PAYMENT_SENT':
+      case 'PAYMENT_ACKNOWLEDGED':
+        return {
+          label: 'Settled',
+          className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+        };
+      default:
+        return {
+          label: 'Registered',
+          className: 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+        };
+    }
+  };
+
+  const handleCopyDeviceId = (id: string) => {
+    navigator.clipboard?.writeText(id);
+    setCopiedDeviceId(id);
+    setTimeout(() => setCopiedDeviceId(null), 2000);
+  };
 
   // Quick Action: Clear All Pending Quarantined Flags
   const handleClearAllFlagsClick = () => {
@@ -417,92 +543,117 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="auditor-header-banner p-6 rounded-2xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-indigo-950/60 border border-purple-800/50 backdrop-blur-md shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-semibold border border-purple-500/20">
-            <Building2 className="w-3.5 h-3.5" />
-            <span>Central Pollution Control Board (CPCB) • Statutory Audit Node</span>
+      {/* Executive Statutory Header Banner */}
+      <div className="auditor-header-banner p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-purple-950/80 via-slate-900/90 to-indigo-950/70 border border-purple-700/40 backdrop-blur-xl shadow-2xl space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 text-xs font-semibold border border-purple-500/30 backdrop-blur-sm">
+              <Building2 className="w-3.5 h-3.5 text-purple-400" />
+              <span>Central Pollution Control Board (CPCB) • Statutory Audit Node</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
+              Regulatory Compliance, Targets &amp; Chain-of-Custody Audit
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
+              Statutory oversight under E-Waste (Management) Rules 2022 &amp; Amendment G.S.R. 699(E). Automated verification of EPR obligations, immutable lifecycle logs, and tamper-proof SHA-256 cryptographic ledgers.
+            </p>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-1">
-            Regulatory Compliance, Targets & Chain of Custody Audit
-          </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Statutory oversight under E-Waste (Management) Rules 2022 & Amendment G.S.R. 699(E). Automated verification of EPR obligations, immutable lifecycle logs, and tamper-proof SHA-256 cryptographic ledgers.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          {/* Quick Audit Actions Toolbar next to export button */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-950/80 border border-purple-500/30 shadow-inner">
-            <span className="text-[10px] font-mono font-bold text-amber-400 px-2 flex items-center gap-1">
+          {/* Quick Action Chips */}
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-center p-1.5 rounded-xl bg-slate-950/80 border border-purple-500/30 shadow-inner">
+            <span className="text-[10px] font-mono font-bold text-amber-400 px-2 flex items-center gap-1 shrink-0">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Quick Actions:</span>
+              <span className="hidden sm:inline">Actions:</span>
             </span>
 
             <button
               onClick={handleClearAllFlagsClick}
-              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
               title="Batch clear all pending quarantined flags across registry"
             >
               <CheckCheck className="w-3.5 h-3.5" />
-              <span>Clear All Pending Flags</span>
+              <span>Clear All Flags</span>
             </button>
 
             <button
               onClick={() => setShowBulkNotifyModal(true)}
-              className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
               title="Broadcast filing directives to all 22 state hubs"
             >
               <BellRing className="w-3.5 h-3.5" />
-              <span>Bulk Notify Hubs</span>
+              <span>Notify Hubs</span>
             </button>
 
             <button
               onClick={() => setShowQuarterlySummaryModal(true)}
-              className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
+              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow"
               title="Generate quarterly executive summary with print & export"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Generate Quarterly Summary</span>
+              <span>Quarterly Summary</span>
             </button>
           </div>
+        </div>
 
-          <button
-            onClick={() => setShowDigitalAuditTrailModal(true)}
-            className="px-3 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900/80 text-xs font-bold text-purple-200 hover:text-white transition shadow flex items-center gap-2 border border-purple-600/50"
-            title="Inspect persistent digital audit trail of manual status overrides and flag resolutions"
-          >
-            <Lock className="w-4 h-4 text-purple-400" />
-            <span>Digital Audit Trail ({storedOverridesCount})</span>
-          </button>
+        {/* Regulatory Export Toolbars */}
+        <div className="pt-3 border-t border-purple-800/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-400 font-mono text-[11px]">
+            <Lock className="w-3.5 h-3.5 text-purple-400" />
+            <span>DPDP Act 2023 &amp; NIST SP 800-88 Immutable Audit Trail Node</span>
+          </div>
 
-          <button
-            onClick={() => setShowForm6Modal(true)}
-            className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/30 flex items-center gap-2 border border-purple-500/50"
-            title="Export formal CPCB Form-6 regulatory transit manifest & audit report (Rule 19)"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Export Audit Report (Form-6)</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowDigitalAuditTrailModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-950/90 hover:bg-purple-900/90 text-xs font-semibold text-purple-200 hover:text-white transition shadow flex items-center gap-2 border border-purple-600/50"
+              title="Inspect persistent digital audit trail of manual status overrides and flag resolutions"
+            >
+              <Lock className="w-3.5 h-3.5 text-purple-400" />
+              <span>Digital Audit Trail ({storedOverridesCount})</span>
+            </button>
 
-          <button
-            onClick={() => setShowAnnualReportModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition shadow-lg shadow-indigo-600/20 flex items-center gap-2 border border-indigo-500/40"
-            title="Download print-friendly CPCB annual compliance dossier"
-          >
-            <FileText className="w-4 h-4" />
-            <span>Download Annual Report</span>
-          </button>
+            <button
+              onClick={() => setShowForm6Modal(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/30 flex items-center gap-2 border border-purple-500/50"
+              title="Export formal CPCB Form-6 regulatory audit report & manifest (Rule 19)"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Export Audit Report</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-950 text-purple-200 border border-purple-800 font-bold">
+                CPCB Form-6
+              </span>
+            </button>
 
-          <button
-            onClick={handleExportAllAuditLogs}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 hover:text-white border border-slate-700 transition flex items-center gap-2 shadow"
-            title="Download full tamper-proof CSV of all device lifecycle events and audit trails"
-          >
-            <Download className="w-4 h-4 text-purple-400" />
-            <span>Export CSV</span>
-          </button>
+            <button
+              onClick={() => setShowSignedDeviceListModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition shadow-lg shadow-emerald-600/30 flex items-center gap-2 border border-emerald-500/50"
+              title="Export complete itemized device list as signed PDF for CPCB filing requirements"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Signed Device List (PDF)</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-200 border border-emerald-800 font-bold">
+                Filing
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowAnnualReportModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition shadow-lg shadow-indigo-600/20 flex items-center gap-2 border border-indigo-500/40"
+              title="Download print-friendly CPCB annual compliance dossier"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Annual Dossier</span>
+            </button>
+
+            <button
+              onClick={handleExportAllAuditLogs}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 hover:text-white border border-slate-700 transition flex items-center gap-2 shadow"
+              title="Download full tamper-proof CSV of all device lifecycle events and audit trails"
+            >
+              <Download className="w-3.5 h-3.5 text-purple-400" />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -522,27 +673,31 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         </div>
       )}
 
-      {/* Sub Tabs */}
-      <div className="flex border-b border-slate-800 overflow-x-auto no-scrollbar">
+      {/* Sub Tabs Navigation */}
+      <div className="p-1.5 rounded-xl bg-slate-900/90 border border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar shadow-inner">
         <button
           onClick={() => setActiveTab('scorecard')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'scorecard'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
-          <span>Auditor Scorecard &amp; Flags</span>
+          <span>Auditor Scorecard &amp; Registry</span>
+          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+            activeTab === 'scorecard' ? 'bg-white/20 text-white' : 'bg-slate-800 text-purple-300'
+          }`}>
+            {devices.length}
+          </span>
         </button>
 
-        {/* National Geography Hub Risk Map Tab */}
         <button
           onClick={() => setActiveTab('national_map')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'national_map'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <MapPin className="w-4 h-4" />
@@ -552,13 +707,12 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           </span>
         </button>
 
-        {/* Annual Audit History Tab */}
         <button
           onClick={() => setActiveTab('audit_history')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'audit_history'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Building2 className="w-4 h-4" />
@@ -568,13 +722,12 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           </span>
         </button>
 
-        {/* Primary New Compliance Logs Tab */}
         <button
           onClick={() => setActiveTab('compliance_logs')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'compliance_logs'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Lock className="w-4 h-4" />
@@ -586,78 +739,77 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'history'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Device Compliance History</span>
-          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
-            Provenance
-          </span>
+          <span>Device Provenance</span>
         </button>
+
         <button
           onClick={() => setActiveTab('calendar')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'calendar'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Compliance Deadline Calendar</span>
+          <span>Deadline Calendar</span>
           <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
             Alert
           </span>
         </button>
+
         <button
           onClick={() => setActiveTab('cpcb_targets')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'cpcb_targets'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span>Quarterly EPR Targets vs Actuals</span>
+          <span>Quarterly EPR Targets</span>
         </button>
+
         <button
           onClick={() => setActiveTab('heatmap')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'heatmap'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          <span>Regional Targets &amp; District Heatmap</span>
-          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
-            Underperforming Districts
-          </span>
+          <span>District Heatmap</span>
         </button>
+
         <button
           onClick={() => setActiveTab('audit_trail')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'audit_trail'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Database className="w-4 h-4" />
           <span>Legacy Audit Trail ({AUDIT_LOGS.length})</span>
         </button>
+
         <button
           onClick={() => setActiveTab('recycler_directory')}
-          className={`pb-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition shrink-0 ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
             activeTab === 'recycler_directory'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
           <Building2 className="w-4 h-4" />
-          <span>Authorized Recyclers Directory</span>
+          <span>Authorized Recyclers</span>
         </button>
       </div>
 
@@ -677,32 +829,47 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             }}
           />
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-xs">Total Registered Units</span>
-              <div className="text-xl font-bold text-white mt-1">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 border-t-2 border-t-purple-500 shadow-lg space-y-1.5">
+              <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider block">Total Registered Units</span>
+              <div className="text-2xl font-black text-white tracking-tight font-mono tabular-nums">
                 {NATIONAL_STATS.platformRegisteredDevices.toLocaleString()}
               </div>
-              <span className="text-[10px] text-emerald-400">100% Chain-of-Custody</span>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-xs">Gross Collected Weight</span>
-              <div className="text-xl font-bold text-white mt-1">
-                {NATIONAL_STATS.platformTotalKgCollected.toLocaleString()} kg
+              <div className="text-[11px] text-emerald-400 flex items-center gap-1 font-sans">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>100% Chain-of-Custody</span>
               </div>
-              <span className="text-[10px] text-slate-400">Calibrated Scale Logs</span>
             </div>
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-xs">Wipe Success Rate</span>
-              <div className="text-xl font-bold text-emerald-400 mt-1">99.8%</div>
-              <span className="text-[10px] text-slate-400">NIST SP 800-88 Purge</span>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <span className="text-slate-400 text-xs">Open Flags & Discrepancies</span>
-              <div className="text-xl font-bold text-rose-400 mt-1">
-                {devices.filter((d) => d.status === 'FLAGGED' || d.status === 'HOLD').length} Cases
+
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 border-t-2 border-t-cyan-500 shadow-lg space-y-1.5">
+              <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider block">Gross Collected Weight</span>
+              <div className="text-2xl font-black text-white tracking-tight font-mono tabular-nums">
+                {NATIONAL_STATS.platformTotalKgCollected.toLocaleString()} <span className="text-sm font-normal text-slate-400">kg</span>
               </div>
-              <span className="text-[10px] text-rose-400/80">Pending Admin Action</span>
+              <div className="text-[11px] text-cyan-400 flex items-center gap-1 font-sans">
+                <Scale className="w-3 h-3" />
+                <span>NABL Calibrated Scale Logs</span>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 border-t-2 border-t-emerald-500 shadow-lg space-y-1.5">
+              <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider block">Data Erasure Rate</span>
+              <div className="text-2xl font-black text-emerald-400 tracking-tight font-mono tabular-nums">99.8%</div>
+              <div className="text-[11px] text-slate-400 flex items-center gap-1 font-sans">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>NIST SP 800-88 Purged</span>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 border-t-2 border-t-rose-500 shadow-lg space-y-1.5">
+              <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider block">Open Flags &amp; Holds</span>
+              <div className="text-2xl font-black text-rose-400 tracking-tight font-mono tabular-nums">
+                {devices.filter((d) => d.status === 'FLAGGED' || d.status === 'HOLD').length} <span className="text-sm font-normal text-rose-300">Cases</span>
+              </div>
+              <div className="text-[11px] text-rose-400/90 flex items-center gap-1 font-sans">
+                <AlertTriangle className="w-3 h-3" />
+                <span>Statutory Queue Active</span>
+              </div>
             </div>
           </div>
 
@@ -868,62 +1035,418 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
             </div>
           </div>
 
-          {/* Flagged Devices Queue */}
-          <div id="quarantine-queue-section" className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          {/* Flagged Devices Queue with Motion Entry */}
+          <div id="quarantine-queue-section" className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-xl backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Statutory Discrepancy & Quarantine Queue</h3>
+                <h3 className="text-base font-bold text-white tracking-tight">Statutory Discrepancy &amp; Quarantine Queue</h3>
               </div>
               <span className="text-xs text-amber-400 font-mono">STRICT CHAIN OF CUSTODY</span>
             </div>
 
             <div className="space-y-3">
-              {devices
-                .filter((d) => d.status === 'FLAGGED' || d.status === 'HOLD')
-                .map((d) => (
-                  <div
-                    key={d.id}
-                    className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                      d.status === 'FLAGGED'
-                        ? 'bg-rose-950/20 border-rose-600/40'
-                        : 'bg-amber-950/20 border-amber-600/40'
+              <AnimatePresence>
+                {devices
+                  .filter((d) => d.status === 'FLAGGED' || d.status === 'HOLD')
+                  .map((d, idx) => (
+                    <motion.div
+                      key={d.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                      transition={{ duration: 0.25, delay: idx * 0.04 }}
+                      className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                        d.status === 'FLAGGED'
+                          ? 'bg-rose-950/20 border-rose-600/40'
+                          : 'bg-amber-950/20 border-amber-600/40'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-white">
+                            {d.brand} {d.model} ({d.category})
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                            {d.id}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase font-mono ${
+                              d.status === 'FLAGGED' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            }`}
+                          >
+                            {d.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300">{d.flagReason || d.holdReason}</p>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          Intake: {d.intakeWeightKg} kg • Plant: {d.factoryWeightKg ? `${d.factoryWeightKg} kg` : 'Pending'} • Hub: {d.hubLocation}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => setInspectingDevice(d)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition flex items-center gap-1 border border-slate-700"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Inspect</span>
+                        </button>
+                        {currentUser.role === 'admin' && (
+                          <button
+                            onClick={() => onResolveFlag && onResolveFlag(d.id)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition shadow-sm"
+                          >
+                            Admin Resolve
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Dedicated Real-Time Device Status & Chain-of-Custody Table with Framer Motion entry animations */}
+          <div id="device-status-table-section" className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-5 shadow-2xl backdrop-blur-xl">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <ShieldCheck className="w-5 h-5 text-purple-400" />
+                  </span>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                      <span>Real-Time Registered Device Status &amp; Chain-of-Custody</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-bold">
+                        CPCB Form 3 / Rule 13
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Live inspection of registered consumer and enterprise e-waste consignments across all collection hubs and refineries.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowSignedDeviceListModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                  title="Export current registered device list as a signed CPCB statutory filing PDF"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Export Signed PDF</span>
+                </button>
+                <span className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 font-mono font-bold text-purple-400 text-xs">
+                  {filteredAuditorDevices.length} of {devices.length} Units
+                </span>
+              </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="space-y-3">
+              {/* Segmented Status Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                {[
+                  { key: 'ALL', label: 'All Registered', count: devices.length },
+                  { key: 'FLAGGED', label: 'Quarantined', count: devices.filter(d => d.status === 'FLAGGED').length },
+                  { key: 'HOLD', label: 'Audit Hold', count: devices.filter(d => d.status === 'HOLD').length },
+                  { key: 'PURGED_NIST', label: 'NIST Scrubbed', count: devices.filter(d => d.status === 'WIPE_VERIFIED' || !!d.wipeRecord).length },
+                  { key: 'TRANSIT', label: 'In Transit', count: devices.filter(d => d.status === 'READY_FOR_DISPATCH' || d.status === 'FACTORY_INSPECTION').length },
+                  { key: 'CERTIFIED', label: 'Certified / Recycled', count: devices.filter(d => d.status === 'CERTIFIED' || d.status === 'RECYCLED').length },
+                  { key: 'INTAKE', label: 'Ingress Intake', count: devices.filter(d => d.status === 'REGISTERED' || d.status === 'DETAILS_CONFIRMED' || d.status === 'ACCEPTED').length },
+                ].map((st) => (
+                  <button
+                    key={st.key}
+                    onClick={() => setDeviceStatusFilter(st.key as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5 ${
+                      deviceStatusFilter === st.key
+                        ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
+                        : 'bg-slate-950/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
                     }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">
-                          {d.brand} {d.model} ({d.category})
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300">
-                          {d.id}
-                        </span>
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                            d.status === 'FLAGGED' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
-                          }`}
-                        >
-                          {d.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300">{d.flagReason || d.holdReason}</p>
-                      <div className="text-[10px] text-slate-400">
-                        Intake: {d.intakeWeightKg} kg • Factory: {d.factoryWeightKg || 'Pending'} kg • Hub: {d.hubLocation}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {currentUser.role === 'admin' && (
-                        <button
-                          onClick={() => onResolveFlag && onResolveFlag(d.id)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition"
-                        >
-                          Admin Resolve with Note
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    <span>{st.label}</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                      deviceStatusFilter === st.key ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {st.count}
+                    </span>
+                  </button>
                 ))}
+              </div>
+
+              {/* Search, Category & Sorting */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
+                <div className="relative flex-1 min-w-[260px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    value={deviceSearchTerm}
+                    onChange={(e) => setDeviceSearchTerm(e.target.value)}
+                    placeholder="Filter by device ID, brand, model, serial, IMEI, or consignor..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-sans"
+                  />
+                  {deviceSearchTerm && (
+                    <button
+                      onClick={() => setDeviceSearchTerm('')}
+                      className="absolute right-2.5 top-2.5 text-slate-500 hover:text-white text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    value={deviceCategoryFilter}
+                    onChange={(e) => setDeviceCategoryFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="ALL">All Categories ({deviceCategories.length})</option>
+                    {deviceCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={deviceSortField}
+                    onChange={(e) => setDeviceSortField(e.target.value as any)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="id">Sort by Date / ID</option>
+                    <option value="weight">Sort by Scale Weight</option>
+                    <option value="co2">Sort by CO₂ Abated</option>
+                    <option value="status">Sort by Status</option>
+                  </select>
+
+                  {(deviceSearchTerm || deviceStatusFilter !== 'ALL' || deviceCategoryFilter !== 'ALL') && (
+                    <button
+                      onClick={() => {
+                        setDeviceSearchTerm('');
+                        setDeviceStatusFilter('ALL');
+                        setDeviceCategoryFilter('ALL');
+                      }}
+                      className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 hover:text-white transition flex items-center gap-1 border border-slate-700"
+                      title="Reset filters"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Reset</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Device Status Table with Framer Motion entry transitions */}
+            <div className="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 shadow-inner">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/90 text-slate-400 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-3.5">Device ID &amp; Timestamp</th>
+                    <th className="py-3 px-3">Hardware Profile</th>
+                    <th className="py-3 px-3">IMEI / Serial</th>
+                    <th className="py-3 px-3">Statutory Status</th>
+                    <th className="py-3 px-3">Scale Weight</th>
+                    <th className="py-3 px-3">NIST Erasure &amp; Hash</th>
+                    <th className="py-3 px-3 text-right">CO₂ &amp; Value</th>
+                    <th className="py-3 px-3.5 text-right">Auditor Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  <AnimatePresence mode="popLayout">
+                    {filteredAuditorDevices.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-500 font-sans">
+                          <div className="max-w-sm mx-auto space-y-2">
+                            <Search className="w-6 h-6 text-slate-600 mx-auto" />
+                            <p className="text-sm font-semibold text-slate-400">No registered devices matched your filter criteria</p>
+                            <p className="text-xs text-slate-500">Try adjusting your search terms, status filters, or selected category.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAuditorDevices.map((device, idx) => {
+                        const badge = getDeviceStatusBadge(device.status);
+                        return (
+                          <motion.tr
+                            key={device.id}
+                            initial={{ opacity: 0, y: 14 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{
+                              duration: 0.28,
+                              delay: Math.min(idx * 0.035, 0.35),
+                              ease: [0.16, 1, 0.3, 1]
+                            }}
+                            className="hover:bg-slate-800/50 transition-colors border-b border-slate-800/60 font-mono text-xs group"
+                          >
+                            {/* Device ID */}
+                            <td className="py-3.5 px-3.5 align-top">
+                              <div className="flex items-center gap-1.5 font-bold text-white text-xs">
+                                <span>{device.id}</span>
+                                <button
+                                  onClick={() => handleCopyDeviceId(device.id)}
+                                  className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white transition"
+                                  title="Copy Device ID"
+                                >
+                                  {copiedDeviceId === device.id ? (
+                                    <CheckCheck className="w-3 h-3 text-emerald-400" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-slate-500 block mt-0.5 font-sans">
+                                {device.registeredAt}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block truncate max-w-[170px]" title={device.hubLocation}>
+                                {device.hubLocation}
+                              </span>
+                            </td>
+
+                            {/* Make & Category */}
+                            <td className="py-3.5 px-3 align-top font-sans">
+                              <div className="font-bold text-slate-100 text-xs flex items-center gap-1.5">
+                                {device.category === 'Smartphone' ? (
+                                  <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                ) : device.category === 'Laptop' ? (
+                                  <Laptop className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                ) : (
+                                  <Cpu className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                )}
+                                <span>{device.brand} {device.model}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
+                                <span>{device.category}</span>
+                                <span>•</span>
+                                <span className="capitalize">{device.condition}</span>
+                              </div>
+                            </td>
+
+                            {/* Identification */}
+                            <td className="py-3.5 px-3 align-top font-mono text-[11px]">
+                              {device.imei ? (
+                                <div className="space-y-0.5">
+                                  <span className="text-cyan-400 font-semibold block">IMEI: {device.imei}</span>
+                                  <span className="text-[9px] text-emerald-400 font-sans flex items-center gap-1">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                    <span>DoT Saathi Clean</span>
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <span className="text-slate-300 block">SN: {device.serialNumber || 'N/A'}</span>
+                                  <span className="text-[10px] text-slate-500">UEFI: {device.uefiVersion || 'Standard'}</span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td className="py-3.5 px-3 align-top whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wide ${badge.className}`}>
+                                {device.status === 'FLAGGED' ? (
+                                  <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                                ) : device.status === 'HOLD' ? (
+                                  <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                                ) : (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                )}
+                                <span>{badge.label}</span>
+                              </span>
+                              {device.flagReason && (
+                                <span className="text-[10px] text-rose-400/90 block mt-1 max-w-[140px] truncate font-sans" title={device.flagReason}>
+                                  {device.flagReason}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Scale Weight */}
+                            <td className="py-3.5 px-3 align-top font-mono text-xs">
+                              <div className="flex items-center justify-between gap-1 text-slate-200">
+                                <span className="text-slate-500 text-[10px]">Intake:</span>
+                                <span className="font-bold">{device.intakeWeightKg} kg</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-1 text-[11px] text-slate-400 mt-0.5">
+                                <span className="text-slate-500 text-[10px]">Plant:</span>
+                                <span>{device.factoryWeightKg ? `${device.factoryWeightKg} kg` : 'Pending'}</span>
+                              </div>
+                              {device.weightDiscrepancyPct !== undefined && device.weightDiscrepancyPct !== 0 && (
+                                <span className={`text-[10px] font-bold block mt-0.5 ${Math.abs(device.weightDiscrepancyPct) > 10 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                  Δ {device.weightDiscrepancyPct > 0 ? `+${device.weightDiscrepancyPct}` : device.weightDiscrepancyPct}%
+                                </span>
+                              )}
+                            </td>
+
+                            {/* NIST Erasure */}
+                            <td className="py-3.5 px-3 align-top">
+                              {device.wipeRecord ? (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 font-bold">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                    <span>NIST PURGED</span>
+                                  </span>
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <span className="text-[10px] text-cyan-400 font-mono truncate max-w-[110px]" title={device.wipeRecord.verificationHash}>
+                                      {device.wipeRecord.verificationHash.slice(0, 14)}...
+                                    </span>
+                                    <button
+                                      onClick={() => handleCopyDeviceId(device.wipeRecord!.verificationHash)}
+                                      className="p-0.5 rounded hover:bg-slate-800 text-slate-500 hover:text-white"
+                                      title="Copy Forensic Hash"
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-500 font-sans">
+                                  Standard Zeroing
+                                </span>
+                              )}
+                            </td>
+
+                            {/* CO2 & Payout */}
+                            <td className="py-3.5 px-3 align-top text-right font-mono text-xs">
+                              <span className="font-bold text-emerald-400 block">{device.co2SavedKg} kg CO₂</span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 font-sans">
+                                ₹{device.payoutAmount?.toLocaleString() || '1,500'}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3.5 px-3.5 align-top text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setInspectingDevice(device)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-purple-900/60 text-slate-200 hover:text-purple-200 border border-slate-700/80 transition flex items-center gap-1 text-xs font-semibold"
+                                  title="Inspect full cryptographic lifecycle provenance dossier"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-purple-400" />
+                                  <span>Dossier</span>
+                                </button>
+
+                                {(device.status === 'FLAGGED' || device.status === 'HOLD') && onResolveFlag && (
+                                  <button
+                                    onClick={() => onResolveFlag(device.id)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-sm"
+                                    title="Statutory clearance of this discrepancy flag"
+                                  >
+                                    Resolve
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })
+                    )}
+                  </AnimatePresence>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -1073,105 +1596,114 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                  {filteredComplianceLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-400 font-sans">
-                        No compliance events matched your query. Try clearing the filter or search term.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredComplianceLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-800/40 transition">
-                        <td className="p-3.5 align-top whitespace-nowrap">
-                          <span className="text-slate-300 font-semibold block text-[11px]">
-                            {log.timestamp}
-                          </span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 mt-1 inline-block">
-                            {log.blockAnchor}
-                          </span>
-                        </td>
-
-                        <td className="p-3.5 align-top font-sans">
-                          <span className="font-bold text-white block text-xs">
-                            {log.makeModel}
-                          </span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-mono text-cyan-400 font-semibold">
-                              {log.deviceId}
-                            </span>
-                            <span className="text-slate-500">•</span>
-                            <span className="text-[10px] text-slate-400">{log.category}</span>
-                          </div>
-                        </td>
-
-                        <td className="p-3.5 align-top">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                              log.actionCategory === 'wipe'
-                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                                : log.actionCategory === 'ceir'
-                                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                                : log.actionCategory === 'scale'
-                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                : log.actionCategory === 'payout'
-                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                : log.actionCategory === 'intervention'
-                                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                                : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
-                            }`}
-                          >
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>{log.actionCode}</span>
-                          </span>
-                          <span className="block font-sans text-[11px] text-slate-300 font-medium mt-1">
-                            {log.actionLabel}
-                          </span>
-                        </td>
-
-                        <td className="p-3.5 align-top font-sans">
-                          <span className="font-bold text-white block text-xs">
-                            {log.actorName}
-                          </span>
-                          <span className="text-[10px] text-purple-400 block uppercase font-mono">
-                            {log.actorRole}
-                          </span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5 max-w-[180px] truncate" title={log.stationNode}>
-                            {log.stationNode}
-                          </span>
-                        </td>
-
-                        <td className="p-3.5 align-top">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="text-[10px] text-cyan-400 font-mono truncate max-w-[150px] inline-block"
-                              title={log.cryptographicHash}
-                            >
-                              {log.cryptographicHash.slice(0, 18)}...
-                            </span>
-                            <button
-                              onClick={() => handleCopyHash(log.cryptographicHash)}
-                              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                              title="Copy full cryptographic SHA-256 hash"
-                            >
-                              {copiedHash === log.cryptographicHash ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                          <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 mt-1 font-bold">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            <span>{log.status}</span>
-                          </span>
-                        </td>
-
-                        <td className="p-3.5 align-top font-sans text-slate-300 text-xs max-w-xs leading-relaxed">
-                          {log.details}
+                  <AnimatePresence mode="popLayout">
+                    {filteredComplianceLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-400 font-sans">
+                          No compliance events matched your query. Try clearing the filter or search term.
                         </td>
                       </tr>
-                    ))
-                  )}
+                    ) : (
+                      filteredComplianceLogs.map((log, idx) => (
+                        <motion.tr
+                          key={log.id}
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.24, delay: Math.min(idx * 0.025, 0.35) }}
+                          className="hover:bg-slate-800/40 transition"
+                        >
+                          <td className="p-3.5 align-top whitespace-nowrap">
+                            <span className="text-slate-300 font-semibold block text-[11px]">
+                              {log.timestamp}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 mt-1 inline-block">
+                              {log.blockAnchor}
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 align-top font-sans">
+                            <span className="font-bold text-white block text-xs">
+                              {log.makeModel}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] font-mono text-cyan-400 font-semibold">
+                                {log.deviceId}
+                              </span>
+                              <span className="text-slate-500">•</span>
+                              <span className="text-[10px] text-slate-400">{log.category}</span>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 align-top">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                log.actionCategory === 'wipe'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                  : log.actionCategory === 'ceir'
+                                  ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                                  : log.actionCategory === 'scale'
+                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                  : log.actionCategory === 'payout'
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : log.actionCategory === 'intervention'
+                                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                  : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                              }`}
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              <span>{log.actionCode}</span>
+                            </span>
+                            <span className="block font-sans text-[11px] text-slate-300 font-medium mt-1">
+                              {log.actionLabel}
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 align-top font-sans">
+                            <span className="font-bold text-white block text-xs">
+                              {log.actorName}
+                            </span>
+                            <span className="text-[10px] text-purple-400 block uppercase font-mono">
+                              {log.actorRole}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5 max-w-[180px] truncate" title={log.stationNode}>
+                              {log.stationNode}
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 align-top">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="text-[10px] text-cyan-400 font-mono truncate max-w-[150px] inline-block"
+                                title={log.cryptographicHash}
+                              >
+                                {log.cryptographicHash.slice(0, 18)}...
+                              </span>
+                              <button
+                                onClick={() => handleCopyHash(log.cryptographicHash)}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+                                title="Copy full cryptographic SHA-256 hash"
+                              >
+                                {copiedHash === log.cryptographicHash ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-800/60 mt-1 font-bold">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              <span>{log.status}</span>
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 align-top font-sans text-slate-300 text-xs max-w-xs leading-relaxed">
+                            {log.details}
+                          </td>
+                        </motion.tr>
+                      ))
+                    )}
+                  </AnimatePresence>
                 </tbody>
               </table>
             </div>
@@ -1321,19 +1853,28 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                {filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/40 transition">
-                    <td className="p-3 text-slate-400 text-[11px]">{log.timestamp}</td>
-                    <td className="p-3 font-sans">
-                      <span className="font-bold text-white block">{log.actorName}</span>
-                      <span className="text-[10px] text-purple-400">{log.actorRole}</span>
-                    </td>
-                    <td className="p-3 text-emerald-400 font-bold">{log.action}</td>
-                    <td className="p-3 font-sans text-slate-300 max-w-xs">{log.details}</td>
-                    <td className="p-3 text-slate-400 text-[10px]">{log.ipAddress}</td>
-                    <td className="p-3 text-cyan-400 text-[10px]">{log.tamperProofHash}</td>
-                  </tr>
-                ))}
+                <AnimatePresence mode="popLayout">
+                  {filteredLogs.map((log, idx) => (
+                    <motion.tr
+                      key={log.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.22, delay: Math.min(idx * 0.025, 0.35) }}
+                      className="hover:bg-slate-800/40 transition"
+                    >
+                      <td className="p-3 text-slate-400 text-[11px]">{log.timestamp}</td>
+                      <td className="p-3 font-sans">
+                        <span className="font-bold text-white block">{log.actorName}</span>
+                        <span className="text-[10px] text-purple-400">{log.actorRole}</span>
+                      </td>
+                      <td className="p-3 text-emerald-400 font-bold">{log.action}</td>
+                      <td className="p-3 font-sans text-slate-300 max-w-xs">{log.details}</td>
+                      <td className="p-3 text-slate-400 text-[10px]">{log.ipAddress}</td>
+                      <td className="p-3 text-cyan-400 text-[10px]">{log.tamperProofHash}</td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               </tbody>
             </table>
           </div>
@@ -1494,6 +2035,141 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           devices={devices}
           onClose={() => setShowQuarterlySummaryModal(false)}
         />
+      )}
+
+      {/* Signed Device List PDF Report Modal for CPCB Statutory Filing */}
+      {showSignedDeviceListModal && (
+        <AuditorSignedDeviceListPdfModal
+          isOpen={showSignedDeviceListModal}
+          onClose={() => setShowSignedDeviceListModal(false)}
+          currentUser={currentUser}
+          devices={devices}
+        />
+      )}
+
+      {/* Quick Device Provenance & Regulatory Lifecycle Dossier Modal */}
+      {inspectingDevice && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5">
+          <div className="w-full max-w-3xl bg-slate-900 border border-purple-500/40 rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>{inspectingDevice.brand} {inspectingDevice.model}</span>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
+                      {inspectingDevice.id}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Statutory Lifecycle Provenance &amp; Verification Dossier
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setInspectingDevice(null)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-[10px] text-slate-500 uppercase block">Status</span>
+                  <span className="text-white font-bold">{inspectingDevice.status}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-[10px] text-slate-500 uppercase block">Scale Weight</span>
+                  <span className="text-cyan-400 font-bold">{inspectingDevice.intakeWeightKg} kg</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-[10px] text-slate-500 uppercase block">CO₂ Abated</span>
+                  <span className="text-emerald-400 font-bold">{inspectingDevice.co2SavedKg} kg</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-[10px] text-slate-500 uppercase block">Buyback Payout</span>
+                  <span className="text-purple-400 font-bold">₹{inspectingDevice.payoutAmount?.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Hardware Profile & Sanchar Saathi */}
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                <span className="font-bold text-white block text-sm">Regulatory Hardware Specifications</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300 font-mono text-[11px]">
+                  <div><span className="text-slate-500">Serial Number:</span> {inspectingDevice.serialNumber || 'N/A'}</div>
+                  <div><span className="text-slate-500">Category:</span> {inspectingDevice.category}</div>
+                  <div><span className="text-slate-500">IMEI (DoT):</span> {inspectingDevice.imei || 'Not applicable'}</div>
+                  <div><span className="text-slate-500">UEFI Version:</span> {inspectingDevice.uefiVersion || 'Embedded standard'}</div>
+                  <div><span className="text-slate-500">Consignor:</span> {inspectingDevice.userName}</div>
+                  <div><span className="text-slate-500">Collection Node:</span> {inspectingDevice.hubLocation}</div>
+                </div>
+              </div>
+
+              {/* NIST SP 800-88 Data Scrub Evidence */}
+              <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>NIST SP 800-88 Rev. 2 Sanitization Record</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">
+                    PASSED
+                  </span>
+                </div>
+                {inspectingDevice.wipeRecord ? (
+                  <div className="space-y-1.5 font-mono text-[11px] text-slate-300 pt-1">
+                    <div><span className="text-slate-400">Method:</span> {inspectingDevice.wipeRecord.method}</div>
+                    <div><span className="text-slate-400">Sanitization Tool:</span> {inspectingDevice.wipeRecord.toolName} {inspectingDevice.wipeRecord.toolVersion}</div>
+                    <div><span className="text-slate-400">Certifying Engineer:</span> {inspectingDevice.wipeRecord.engineerName}</div>
+                    <div className="p-2 rounded bg-slate-950 border border-emerald-500/20 break-all text-emerald-400 text-[10px]">
+                      Cryptographic Hash: {inspectingDevice.wipeRecord.verificationHash}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-xs">
+                    Standard cryptographic factory erasure performed upon ingress triage.
+                  </p>
+                )}
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <button
+                  onClick={() => {
+                    handleCopyDeviceId(inspectingDevice.id);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Device ID</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {(inspectingDevice.status === 'FLAGGED' || inspectingDevice.status === 'HOLD') && onResolveFlag && (
+                    <button
+                      onClick={() => {
+                        onResolveFlag(inspectingDevice.id);
+                        setInspectingDevice(null);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/20"
+                    >
+                      Clear Discrepancy Flag
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setInspectingDevice(null)}
+                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

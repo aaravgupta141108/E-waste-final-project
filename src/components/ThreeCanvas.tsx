@@ -137,14 +137,29 @@ export const ThreeCanvas: React.FC = () => {
     };
     window.addEventListener('mousemove', handleMouseMove);
 
-    // Resize handler
+    // Resize observer for precise container responsiveness
+    const resizeObserver = new ResizeObserver(() => {
+      if (!container) return;
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      if (newWidth > 0 && newHeight > 0) {
+        camera.aspect = newWidth / newHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(newWidth, newHeight);
+      }
+    });
+    resizeObserver.observe(container);
+
+    // Resize handler fallback
     const handleResize = () => {
       if (!container) return;
       const newWidth = container.clientWidth;
       const newHeight = container.clientHeight;
-      camera.aspect = newWidth / newHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(newWidth, newHeight);
+      if (newWidth > 0 && newHeight > 0) {
+        camera.aspect = newWidth / newHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(newWidth, newHeight);
+      }
     };
     window.addEventListener('resize', handleResize);
 
@@ -176,6 +191,7 @@ export const ThreeCanvas: React.FC = () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       if (container && renderer.domElement) {
         container.removeChild(renderer.domElement);
       }
@@ -190,7 +206,7 @@ export const ThreeCanvas: React.FC = () => {
   return (
     <div
       ref={mountRef}
-      className="w-full h-full min-h-[380px] lg:min-h-[500px] flex items-center justify-center relative cursor-grab active:cursor-grabbing pointer-events-auto"
+      className="w-full h-full min-h-[320px] lg:min-h-[380px] flex items-center justify-center relative cursor-grab active:cursor-grabbing pointer-events-auto"
       title="Interactive 3D Circular Economy Core"
     />
   );
