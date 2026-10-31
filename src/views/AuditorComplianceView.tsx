@@ -39,7 +39,10 @@ import {
   Hourglass,
   CheckSquare,
   Square,
-  X
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -129,11 +132,36 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [timelineStatusFilter, setTimelineStatusFilter] = useState<'ALL' | ComplianceEventStatus>('ALL');
 
   // Dedicated Device Status & Chain-of-Custody Table State
-  const [deviceStatusFilter, setDeviceStatusFilter] = useState<'ALL' | 'FLAGGED' | 'HOLD' | 'PURGED_NIST' | 'INTAKE' | 'TRANSIT' | 'CERTIFIED'>('ALL');
+  const [deviceStatusFilter, setDeviceStatusFilter] = useState<
+    | 'ALL'
+    | 'WIPE_VERIFIED'
+    | 'READY_FOR_DISPATCH'
+    | 'FLAGGED'
+    | 'HOLD'
+    | 'WIPING'
+    | 'FACTORY_INSPECTION'
+    | 'ACCEPTED'
+    | 'RECYCLED'
+    | 'CERTIFIED'
+    | 'REGISTERED'
+    | 'DETAILS_CONFIRMED'
+    | 'PURGED_NIST'
+    | 'INTAKE'
+    | 'TRANSIT'
+  >('ALL');
   const [deviceSearchTerm, setDeviceSearchTerm] = useState('');
   const [deviceCategoryFilter, setDeviceCategoryFilter] = useState('ALL');
-  const [deviceSortField, setDeviceSortField] = useState<'id' | 'weight' | 'co2' | 'status'>('id');
-  const [deviceSortOrder, setDeviceSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [deviceSortField, setDeviceSortField] = useState<
+    | 'id'
+    | 'status_lifecycle_order'
+    | 'status_wipe_verified_first'
+    | 'status_ready_dispatch_first'
+    | 'status_flagged_first'
+    | 'status'
+    | 'weight'
+    | 'co2'
+  >('status_lifecycle_order');
+  const [deviceSortOrder, setDeviceSortOrder] = useState<'asc' | 'desc'>('asc');
   const [inspectingDevice, setInspectingDevice] = useState<DeviceItem | null>(null);
   const [copiedDeviceId, setCopiedDeviceId] = useState<string | null>(null);
 
@@ -145,15 +173,57 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   }, [devices]);
 
   const filteredAuditorDevices = useMemo(() => {
+    // Canonical CPCB statutory lifecycle progression rank
+    const CPCB_LIFECYCLE_RANK: Record<string, number> = {
+      'REGISTERED': 1,
+      'DETAILS_CONFIRMED': 2,
+      'ACCEPTED': 3,
+      'WIPING': 4,
+      'WIPE_VERIFIED': 5,
+      'READY_FOR_DISPATCH': 6,
+      'FACTORY_INSPECTION': 7,
+      'RECYCLED': 8,
+      'CERTIFIED': 9,
+      'PAYMENT_SENT': 10,
+      'PAYMENT_ACKNOWLEDGED': 11,
+      'HOLD': 12,
+      'FLAGGED': 13,
+    };
+
     return devices
       .filter((device) => {
-        // Status filter
-        if (deviceStatusFilter === 'FLAGGED' && device.status !== 'FLAGGED') return false;
-        if (deviceStatusFilter === 'HOLD' && device.status !== 'HOLD') return false;
-        if (deviceStatusFilter === 'PURGED_NIST' && device.status !== 'WIPE_VERIFIED' && !device.wipeRecord) return false;
-        if (deviceStatusFilter === 'INTAKE' && device.status !== 'REGISTERED' && device.status !== 'DETAILS_CONFIRMED' && device.status !== 'ACCEPTED') return false;
-        if (deviceStatusFilter === 'TRANSIT' && device.status !== 'READY_FOR_DISPATCH' && device.status !== 'FACTORY_INSPECTION') return false;
-        if (deviceStatusFilter === 'CERTIFIED' && device.status !== 'CERTIFIED' && device.status !== 'RECYCLED') return false;
+        // CPCB Lifecycle Status filter
+        if (deviceStatusFilter !== 'ALL') {
+          if (deviceStatusFilter === 'WIPE_VERIFIED') {
+            if (device.status !== 'WIPE_VERIFIED') return false;
+          } else if (deviceStatusFilter === 'READY_FOR_DISPATCH') {
+            if (device.status !== 'READY_FOR_DISPATCH') return false;
+          } else if (deviceStatusFilter === 'FLAGGED') {
+            if (device.status !== 'FLAGGED') return false;
+          } else if (deviceStatusFilter === 'HOLD') {
+            if (device.status !== 'HOLD') return false;
+          } else if (deviceStatusFilter === 'WIPING') {
+            if (device.status !== 'WIPING') return false;
+          } else if (deviceStatusFilter === 'FACTORY_INSPECTION') {
+            if (device.status !== 'FACTORY_INSPECTION') return false;
+          } else if (deviceStatusFilter === 'ACCEPTED') {
+            if (device.status !== 'ACCEPTED') return false;
+          } else if (deviceStatusFilter === 'RECYCLED') {
+            if (device.status !== 'RECYCLED') return false;
+          } else if (deviceStatusFilter === 'CERTIFIED') {
+            if (device.status !== 'CERTIFIED') return false;
+          } else if (deviceStatusFilter === 'REGISTERED') {
+            if (device.status !== 'REGISTERED') return false;
+          } else if (deviceStatusFilter === 'DETAILS_CONFIRMED') {
+            if (device.status !== 'DETAILS_CONFIRMED') return false;
+          } else if (deviceStatusFilter === 'PURGED_NIST') {
+            if (device.status !== 'WIPE_VERIFIED' && !device.wipeRecord) return false;
+          } else if (deviceStatusFilter === 'INTAKE') {
+            if (device.status !== 'REGISTERED' && device.status !== 'DETAILS_CONFIRMED' && device.status !== 'ACCEPTED') return false;
+          } else if (deviceStatusFilter === 'TRANSIT') {
+            if (device.status !== 'READY_FOR_DISPATCH' && device.status !== 'FACTORY_INSPECTION') return false;
+          }
+        }
 
         // Category filter
         if (deviceCategoryFilter !== 'ALL' && device.category !== deviceCategoryFilter) return false;
@@ -175,16 +245,44 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         return true;
       })
       .sort((a, b) => {
-        if (deviceSortField === 'weight') {
-          return deviceSortOrder === 'asc' ? a.intakeWeightKg - b.intakeWeightKg : b.intakeWeightKg - a.intakeWeightKg;
+        let cmp = 0;
+        if (deviceSortField === 'status_wipe_verified_first') {
+          // Sort 'WIPE_VERIFIED' to top
+          const aIs = a.status === 'WIPE_VERIFIED' ? 1 : 0;
+          const bIs = b.status === 'WIPE_VERIFIED' ? 1 : 0;
+          cmp = bIs - aIs;
+          if (cmp === 0) cmp = a.id.localeCompare(b.id);
+        } else if (deviceSortField === 'status_ready_dispatch_first') {
+          // Sort 'READY_FOR_DISPATCH' to top
+          const aIs = a.status === 'READY_FOR_DISPATCH' ? 1 : 0;
+          const bIs = b.status === 'READY_FOR_DISPATCH' ? 1 : 0;
+          cmp = bIs - aIs;
+          if (cmp === 0) cmp = a.id.localeCompare(b.id);
+        } else if (deviceSortField === 'status_flagged_first') {
+          // Sort quarantined/flagged to top
+          const aIs = a.status === 'FLAGGED' ? 1 : 0;
+          const bIs = b.status === 'FLAGGED' ? 1 : 0;
+          cmp = bIs - aIs;
+          if (cmp === 0) cmp = a.id.localeCompare(b.id);
+        } else if (deviceSortField === 'status_lifecycle_order') {
+          // Sort by CPCB canonical statutory lifecycle progression
+          const rankA = CPCB_LIFECYCLE_RANK[a.status] || 99;
+          const rankB = CPCB_LIFECYCLE_RANK[b.status] || 99;
+          cmp = rankA - rankB;
+          if (cmp === 0) cmp = a.id.localeCompare(b.id);
+        } else if (deviceSortField === 'status') {
+          cmp = a.status.localeCompare(b.status);
+          if (cmp === 0) cmp = a.id.localeCompare(b.id);
+        } else if (deviceSortField === 'weight') {
+          cmp = (a.intakeWeightKg || 0) - (b.intakeWeightKg || 0);
+        } else if (deviceSortField === 'co2') {
+          cmp = (a.co2SavedKg || 0) - (b.co2SavedKg || 0);
+        } else {
+          // Default: 'id'
+          cmp = a.id.localeCompare(b.id);
         }
-        if (deviceSortField === 'co2') {
-          return deviceSortOrder === 'asc' ? (a.co2SavedKg || 0) - (b.co2SavedKg || 0) : (b.co2SavedKg || 0) - (a.co2SavedKg || 0);
-        }
-        if (deviceSortField === 'status') {
-          return deviceSortOrder === 'asc' ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
-        }
-        return deviceSortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+
+        return deviceSortOrder === 'asc' ? cmp : -cmp;
       });
   }, [devices, deviceStatusFilter, deviceCategoryFilter, deviceSearchTerm, deviceSortField, deviceSortOrder]);
 
@@ -1257,47 +1355,52 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               </div>
             </div>
 
-            {/* Filter Bar */}
+            {/* Filter & Sorting System */}
             <div className="space-y-3">
-              {/* Segmented Status Tabs */}
+              {/* Segmented Status Tabs (Quick Filters) */}
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
                 {[
-                  { key: 'ALL', label: 'All Registered', count: devices.length },
-                  { key: 'FLAGGED', label: 'Quarantined', count: devices.filter(d => d.status === 'FLAGGED').length },
-                  { key: 'HOLD', label: 'Audit Hold', count: devices.filter(d => d.status === 'HOLD').length },
-                  { key: 'PURGED_NIST', label: 'NIST Scrubbed', count: devices.filter(d => d.status === 'WIPE_VERIFIED' || !!d.wipeRecord).length },
-                  { key: 'TRANSIT', label: 'In Transit', count: devices.filter(d => d.status === 'READY_FOR_DISPATCH' || d.status === 'FACTORY_INSPECTION').length },
-                  { key: 'CERTIFIED', label: 'Certified / Recycled', count: devices.filter(d => d.status === 'CERTIFIED' || d.status === 'RECYCLED').length },
-                  { key: 'INTAKE', label: 'Ingress Intake', count: devices.filter(d => d.status === 'REGISTERED' || d.status === 'DETAILS_CONFIRMED' || d.status === 'ACCEPTED').length },
-                ].map((st) => (
-                  <button
-                    key={st.key}
-                    onClick={() => setDeviceStatusFilter(st.key as any)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5 ${
-                      deviceStatusFilter === st.key
-                        ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
-                        : 'bg-slate-950/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    <span>{st.label}</span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                      deviceStatusFilter === st.key ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'
-                    }`}>
-                      {st.count}
-                    </span>
-                  </button>
-                ))}
+                  { key: 'ALL', label: 'All Consignments', count: devices.length },
+                  { key: 'WIPE_VERIFIED', label: 'WIPE_VERIFIED (NIST)', count: devices.filter(d => d.status === 'WIPE_VERIFIED').length, highlight: 'emerald' },
+                  { key: 'READY_FOR_DISPATCH', label: 'READY_FOR_DISPATCH', count: devices.filter(d => d.status === 'READY_FOR_DISPATCH').length, highlight: 'indigo' },
+                  { key: 'WIPING', label: 'WIPING', count: devices.filter(d => d.status === 'WIPING').length, highlight: 'amber' },
+                  { key: 'FLAGGED', label: 'Quarantined', count: devices.filter(d => d.status === 'FLAGGED').length, highlight: 'rose' },
+                  { key: 'HOLD', label: 'Audit Hold', count: devices.filter(d => d.status === 'HOLD').length, highlight: 'amber' },
+                  { key: 'FACTORY_INSPECTION', label: 'At Refinery', count: devices.filter(d => d.status === 'FACTORY_INSPECTION').length, highlight: 'purple' },
+                  { key: 'ACCEPTED', label: 'Intake Scaled', count: devices.filter(d => d.status === 'ACCEPTED').length, highlight: 'cyan' },
+                  { key: 'CERTIFIED', label: 'CPCB Certified', count: devices.filter(d => d.status === 'CERTIFIED' || d.status === 'RECYCLED').length, highlight: 'emerald' },
+                ].map((st) => {
+                  const isActive = deviceStatusFilter === st.key;
+                  return (
+                    <button
+                      key={st.key}
+                      onClick={() => setDeviceStatusFilter(st.key as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5 ${
+                        isActive
+                          ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30 ring-1 ring-purple-400'
+                          : 'bg-slate-950/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      }`}
+                    >
+                      <span>{st.label}</span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {st.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Search, Category & Sorting */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
-                <div className="relative flex-1 min-w-[260px]">
+              {/* Search, Detailed Status Selector, Category & Sorting */}
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
+                <div className="relative flex-1 min-w-[240px]">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     value={deviceSearchTerm}
                     onChange={(e) => setDeviceSearchTerm(e.target.value)}
-                    placeholder="Filter by device ID, brand, model, serial, IMEI, or consignor..."
+                    placeholder="Search by ID, brand, model, serial, IMEI, or consignor..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-sans"
                   />
                   {deviceSearchTerm && (
@@ -1311,6 +1414,28 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* Detailed CPCB Status Dropdown Filter */}
+                  <select
+                    value={deviceStatusFilter}
+                    onChange={(e) => setDeviceStatusFilter(e.target.value as any)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-medium"
+                    title="Filter by specific CPCB statutory lifecycle stage"
+                  >
+                    <option value="ALL">All CPCB Statuses ({devices.length})</option>
+                    <option value="WIPE_VERIFIED">WIPE_VERIFIED • NIST Purged ({devices.filter(d => d.status === 'WIPE_VERIFIED').length})</option>
+                    <option value="READY_FOR_DISPATCH">READY_FOR_DISPATCH • In Transit ({devices.filter(d => d.status === 'READY_FOR_DISPATCH').length})</option>
+                    <option value="WIPING">WIPING • Data Scrub Active ({devices.filter(d => d.status === 'WIPING').length})</option>
+                    <option value="FACTORY_INSPECTION">FACTORY_INSPECTION • Refinery ({devices.filter(d => d.status === 'FACTORY_INSPECTION').length})</option>
+                    <option value="ACCEPTED">ACCEPTED • Intake Scaled ({devices.filter(d => d.status === 'ACCEPTED').length})</option>
+                    <option value="FLAGGED">FLAGGED • Quarantined ({devices.filter(d => d.status === 'FLAGGED').length})</option>
+                    <option value="HOLD">HOLD • Statutory Hold ({devices.filter(d => d.status === 'HOLD').length})</option>
+                    <option value="RECYCLED">RECYCLED • Material Recovery ({devices.filter(d => d.status === 'RECYCLED').length})</option>
+                    <option value="CERTIFIED">CERTIFIED • CPCB Form 6 ({devices.filter(d => d.status === 'CERTIFIED').length})</option>
+                    <option value="REGISTERED">REGISTERED • Consignor Intake ({devices.filter(d => d.status === 'REGISTERED').length})</option>
+                    <option value="DETAILS_CONFIRMED">DETAILS_CONFIRMED • Verified ({devices.filter(d => d.status === 'DETAILS_CONFIRMED').length})</option>
+                  </select>
+
+                  {/* Hardware Category Filter */}
                   <select
                     value={deviceCategoryFilter}
                     onChange={(e) => setDeviceCategoryFilter(e.target.value)}
@@ -1324,26 +1449,55 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                     ))}
                   </select>
 
+                  {/* CPCB Lifecycle Status Sorting Field */}
                   <select
                     value={deviceSortField}
                     onChange={(e) => setDeviceSortField(e.target.value as any)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-purple-300 font-semibold focus:outline-none focus:border-purple-500"
+                    title="Sort consignments by CPCB lifecycle status or telemetry metrics"
                   >
-                    <option value="id">Sort by Date / ID</option>
-                    <option value="weight">Sort by Scale Weight</option>
-                    <option value="co2">Sort by CO₂ Abated</option>
-                    <option value="status">Sort by Status</option>
+                    <option value="status_lifecycle_order">Sort: CPCB Lifecycle Progression</option>
+                    <option value="status_wipe_verified_first">Sort: 'WIPE_VERIFIED' First</option>
+                    <option value="status_ready_dispatch_first">Sort: 'READY_FOR_DISPATCH' First</option>
+                    <option value="status_flagged_first">Sort: 'FLAGGED' Quarantine First</option>
+                    <option value="status">Sort: Status Alphabetical</option>
+                    <option value="id">Sort: Date / Consignment ID</option>
+                    <option value="weight">Sort: Scale Weight</option>
+                    <option value="co2">Sort: CO₂ Abated</option>
                   </select>
 
-                  {(deviceSearchTerm || deviceStatusFilter !== 'ALL' || deviceCategoryFilter !== 'ALL') && (
+                  {/* Sort Direction Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setDeviceSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    className="px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-purple-500/60 text-xs font-mono font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5"
+                    title={`Current sort order: ${deviceSortOrder === 'asc' ? 'Ascending (A-Z / Low to High)' : 'Descending (Z-A / High to Low)'}. Click to toggle.`}
+                  >
+                    {deviceSortOrder === 'asc' ? (
+                      <>
+                        <ArrowUp className="w-3.5 h-3.5 text-purple-400" />
+                        <span className="text-[11px]">ASC</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDown className="w-3.5 h-3.5 text-purple-400" />
+                        <span className="text-[11px]">DESC</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Reset Filters Button */}
+                  {(deviceSearchTerm || deviceStatusFilter !== 'ALL' || deviceCategoryFilter !== 'ALL' || deviceSortField !== 'status_lifecycle_order') && (
                     <button
                       onClick={() => {
                         setDeviceSearchTerm('');
                         setDeviceStatusFilter('ALL');
                         setDeviceCategoryFilter('ALL');
+                        setDeviceSortField('status_lifecycle_order');
+                        setDeviceSortOrder('asc');
                       }}
                       className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 hover:text-white transition flex items-center gap-1 border border-slate-700"
-                      title="Reset filters"
+                      title="Reset all filters and sorting to defaults"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Reset</span>
@@ -1456,13 +1610,110 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                         title={allFilteredSelected ? "Deselect all" : "Select all filtered devices"}
                       />
                     </th>
-                    <th className="py-3 px-3.5">Device ID &amp; Timestamp</th>
+                    <th className="py-3 px-3.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (deviceSortField === 'id') {
+                            setDeviceSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setDeviceSortField('id');
+                            setDeviceSortOrder('desc');
+                          }
+                        }}
+                        className="flex items-center gap-1 hover:text-white transition font-semibold"
+                        title="Sort by Date / Device ID"
+                      >
+                        <span>Device ID &amp; Timestamp</span>
+                        {deviceSortField === 'id' && (
+                          deviceSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-purple-400" /> : <ArrowDown className="w-3 h-3 text-purple-400" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-3">Hardware Profile</th>
                     <th className="py-3 px-3">IMEI / Serial</th>
-                    <th className="py-3 px-3">Statutory Status</th>
-                    <th className="py-3 px-3">Scale Weight</th>
+                    <th className="py-3 px-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (deviceSortField === 'status_lifecycle_order') {
+                            setDeviceSortField('status_wipe_verified_first');
+                            setDeviceSortOrder('asc');
+                          } else if (deviceSortField === 'status_wipe_verified_first') {
+                            setDeviceSortField('status_ready_dispatch_first');
+                            setDeviceSortOrder('asc');
+                          } else if (deviceSortField === 'status_ready_dispatch_first') {
+                            setDeviceSortField('status_flagged_first');
+                            setDeviceSortOrder('asc');
+                          } else if (deviceSortField === 'status_flagged_first') {
+                            setDeviceSortField('status');
+                            setDeviceSortOrder('asc');
+                          } else {
+                            setDeviceSortField('status_lifecycle_order');
+                            setDeviceSortOrder('asc');
+                          }
+                        }}
+                        className="flex items-center gap-1.5 hover:text-white transition font-semibold text-purple-300"
+                        title="Click to cycle CPCB status sorting: Progression → WIPE_VERIFIED First → READY_FOR_DISPATCH First → Quarantined First → A-Z"
+                      >
+                        <span>Statutory Status</span>
+                        <ArrowUpDown className="w-3 h-3 text-purple-400" />
+                        {deviceSortField.startsWith('status') && (
+                          <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800 lowercase">
+                            {deviceSortField === 'status_wipe_verified_first'
+                              ? 'wipe 1st'
+                              : deviceSortField === 'status_ready_dispatch_first'
+                              ? 'dispatch 1st'
+                              : deviceSortField === 'status_flagged_first'
+                              ? 'flags 1st'
+                              : deviceSortField === 'status_lifecycle_order'
+                              ? 'progression'
+                              : 'a-z'}
+                          </span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="py-3 px-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (deviceSortField === 'weight') {
+                            setDeviceSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setDeviceSortField('weight');
+                            setDeviceSortOrder('desc');
+                          }
+                        }}
+                        className="flex items-center gap-1 hover:text-white transition font-semibold"
+                        title="Sort by Scale Weight"
+                      >
+                        <span>Scale Weight</span>
+                        {deviceSortField === 'weight' && (
+                          deviceSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-purple-400" /> : <ArrowDown className="w-3 h-3 text-purple-400" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-3">NIST Erasure &amp; Hash</th>
-                    <th className="py-3 px-3 text-right">CO₂ &amp; Value</th>
+                    <th className="py-3 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (deviceSortField === 'co2') {
+                            setDeviceSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setDeviceSortField('co2');
+                            setDeviceSortOrder('desc');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 hover:text-white transition font-semibold ml-auto"
+                        title="Sort by CO₂ Abated"
+                      >
+                        <span>CO₂ &amp; Value</span>
+                        {deviceSortField === 'co2' && (
+                          deviceSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-purple-400" /> : <ArrowDown className="w-3 h-3 text-purple-400" />
+                        )}
+                      </button>
+                    </th>
                     <th className="py-3 px-3.5 text-right">Auditor Actions</th>
                   </tr>
                 </thead>
