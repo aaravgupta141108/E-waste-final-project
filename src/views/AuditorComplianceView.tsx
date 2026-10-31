@@ -36,7 +36,10 @@ import {
   MapPin,
   QrCode,
   XCircle,
-  Hourglass
+  Hourglass,
+  CheckSquare,
+  Square,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -86,6 +89,7 @@ interface AuditorComplianceViewProps {
   devices: DeviceItem[];
   onResolveFlag?: (deviceId: string) => void;
   onClearAllFlags?: () => void;
+  onBatchUpdateStatus?: (deviceIds: string[], newStatus: DeviceItem['status'], extra?: Partial<DeviceItem>) => void;
   reminders?: ComplianceDeadlineReminder[];
   onAddReminder?: (reminder: ComplianceDeadlineReminder) => void;
   onDeleteReminder?: (id: string) => void;
@@ -97,6 +101,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   devices,
   onResolveFlag,
   onClearAllFlags,
+  onBatchUpdateStatus,
   reminders = [],
   onAddReminder = () => {},
   onDeleteReminder = () => {},
@@ -131,6 +136,9 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [deviceSortOrder, setDeviceSortOrder] = useState<'asc' | 'desc'>('desc');
   const [inspectingDevice, setInspectingDevice] = useState<DeviceItem | null>(null);
   const [copiedDeviceId, setCopiedDeviceId] = useState<string | null>(null);
+
+  // Batch Device Action State
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
 
   const deviceCategories = useMemo(() => {
     return Array.from(new Set(devices.map((d) => d.category)));
@@ -179,6 +187,75 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         return deviceSortOrder === 'asc' ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
       });
   }, [devices, deviceStatusFilter, deviceCategoryFilter, deviceSearchTerm, deviceSortField, deviceSortOrder]);
+
+  const allFilteredSelected = useMemo(() => {
+    if (filteredAuditorDevices.length === 0) return false;
+    return filteredAuditorDevices.every((d) => selectedDeviceIds.includes(d.id));
+  }, [filteredAuditorDevices, selectedDeviceIds]);
+
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      setSelectedDeviceIds((prev) => prev.filter((id) => !filteredAuditorDevices.some((d) => d.id === id)));
+    } else {
+      const currentFilteredIds = filteredAuditorDevices.map((d) => d.id);
+      setSelectedDeviceIds((prev) => Array.from(new Set([...prev, ...currentFilteredIds])));
+    }
+  };
+
+  const toggleSelectDevice = (id: string) => {
+    setSelectedDeviceIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleExecuteBatchStatusUpdate = (targetStatus: DeviceItem['status']) => {
+    if (selectedDeviceIds.length === 0) return;
+
+    if (onBatchUpdateStatus) {
+      onBatchUpdateStatus(selectedDeviceIds, targetStatus, {
+        flagReason: targetStatus === 'FLAGGED' ? 'Auditor Bulk Compliance Quarantine' : undefined,
+        flagNotes: targetStatus === 'FLAGGED' ? `Quarantined in batch by Auditor ${currentUser.name}` : undefined,
+        holdReason: targetStatus === 'HOLD' ? 'Auditor Bulk Statutory Hold' : undefined
+      });
+    }
+
+    const hexChars = '0123456789abcdef';
+    let randHash = '';
+    for (let i = 0; i < 64; i++) {
+      randHash += hexChars[Math.floor(Math.random() * hexChars.length)];
+    }
+
+    const auditNewStatus: AuditorOverrideRecord['newStatus'] =
+      targetStatus === 'FLAGGED' ? 'OVERRIDE_APPROVED' : 'CLEARED';
+
+    saveStoredOverride({
+      id: `OVR-BULK-${Math.floor(1000 + Math.random() * 9000)}`,
+      timestamp: new Date().toLocaleString('en-IN') + ' IST',
+      deviceId: `BATCH (${selectedDeviceIds.length} Units: ${selectedDeviceIds.slice(0, 3).join(', ')}${selectedDeviceIds.length > 3 ? '...' : ''})`,
+      makeModel: `${selectedDeviceIds.length} Selected Consignment Units`,
+      previousStatus: 'UNDER_REVIEW',
+      newStatus: auditNewStatus,
+      reasonCategory: 'Directorial Discretion Clearance',
+      justificationNotes: `Bulk status update executed by ${currentUser.name} (${currentUser.role}). Marked ${selectedDeviceIds.length} units to '${targetStatus}'. Certified under CPCB Rule 13 audit ledger.`,
+      auditorId: currentUser.id,
+      auditorName: currentUser.name,
+      auditorRole: currentUser.role,
+      stationNode: 'CPCB Central Regulatory Node',
+      cryptographicHash: randHash,
+      blockHeight: 892200 + Math.floor(Math.random() * 500),
+      auditStatus: 'COMMITTED_IMMUTABLE'
+    });
+
+    setStoredOverridesCount((prev) => prev + 1);
+
+    setQuickActionToast({
+      message: `Successfully bulk-updated ${selectedDeviceIds.length} devices to '${targetStatus}' & committed to Digital Audit Trail!`,
+      type: 'success'
+    });
+    setTimeout(() => setQuickActionToast(null), 4500);
+
+    setSelectedDeviceIds([]);
+  };
 
   const getDeviceStatusBadge = (status: DeviceItem['status']) => {
     switch (status) {
@@ -1276,11 +1353,109 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
               </div>
             </div>
 
+            {/* Batch Action Menu Toolbar when items are selected */}
+            <AnimatePresence>
+              {selectedDeviceIds.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                  exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                  className="bg-gradient-to-r from-purple-950/90 via-slate-900/95 to-purple-950/90 border border-purple-500/50 rounded-xl p-3 shadow-xl backdrop-blur-xl flex flex-wrap items-center justify-between gap-3 text-xs overflow-hidden"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      <CheckSquare className="w-4 h-4 text-purple-400" />
+                    </span>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>Batch Action Menu</span>
+                        <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white font-mono text-[11px] font-bold shadow-sm">
+                          {selectedDeviceIds.length} {selectedDeviceIds.length === 1 ? 'Unit' : 'Units'} Selected
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300">
+                        Execute statutory batch status transition across all selected consignments with cryptographic audit commitment.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] text-slate-400 font-semibold mr-1">Bulk Update:</span>
+
+                    {/* Set to RECYCLED */}
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteBatchStatusUpdate('RECYCLED')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-emerald-950/50"
+                      title="Bulk update selected devices to RECYCLED status"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Set to RECYCLED</span>
+                    </button>
+
+                    {/* Set to FLAGGED */}
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteBatchStatusUpdate('FLAGGED')}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-rose-950/50"
+                      title="Bulk quarantine selected devices with statutory FLAGGED status"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Set to FLAGGED</span>
+                    </button>
+
+                    {/* Set to CERTIFIED */}
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteBatchStatusUpdate('CERTIFIED')}
+                      className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-cyan-950/50"
+                      title="Bulk certify selected devices with CPCB Form 6 Certificate"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Set to CERTIFIED</span>
+                    </button>
+
+                    {/* Set to HOLD */}
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteBatchStatusUpdate('HOLD')}
+                      className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-amber-950/50"
+                      title="Bulk place selected devices on regulatory audit HOLD"
+                    >
+                      <Hourglass className="w-3.5 h-3.5" />
+                      <span>Set to HOLD</span>
+                    </button>
+
+                    {/* Clear selection */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDeviceIds([])}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1 border border-slate-700"
+                      title="Clear batch selection"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Device Status Table with Framer Motion entry transitions */}
             <div className="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/60 shadow-inner">
               <table className="w-full text-left text-xs text-slate-300">
                 <thead className="bg-slate-950/90 text-slate-400 uppercase text-[10px] font-semibold tracking-wider border-b border-slate-800">
                   <tr>
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAllFiltered}
+                        aria-label="Select all visible devices"
+                        className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                        title={allFilteredSelected ? "Deselect all" : "Select all filtered devices"}
+                      />
+                    </th>
                     <th className="py-3 px-3.5">Device ID &amp; Timestamp</th>
                     <th className="py-3 px-3">Hardware Profile</th>
                     <th className="py-3 px-3">IMEI / Serial</th>
@@ -1295,7 +1470,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                   <AnimatePresence mode="popLayout">
                     {filteredAuditorDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-500 font-sans">
+                        <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
                           <div className="max-w-sm mx-auto space-y-2">
                             <Search className="w-6 h-6 text-slate-600 mx-auto" />
                             <p className="text-sm font-semibold text-slate-400">No registered devices matched your filter criteria</p>
@@ -1306,6 +1481,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                     ) : (
                       filteredAuditorDevices.map((device, idx) => {
                         const badge = getDeviceStatusBadge(device.status);
+                        const isSelected = selectedDeviceIds.includes(device.id);
                         return (
                           <motion.tr
                             key={device.id}
@@ -1317,8 +1493,21 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
                               delay: Math.min(idx * 0.035, 0.35),
                               ease: [0.16, 1, 0.3, 1]
                             }}
-                            className="hover:bg-slate-800/50 transition-colors border-b border-slate-800/60 font-mono text-xs group"
+                            className={`hover:bg-slate-800/50 transition-colors border-b border-slate-800/60 font-mono text-xs group ${
+                              isSelected ? 'bg-purple-950/30 ring-1 ring-inset ring-purple-500/40' : ''
+                            }`}
                           >
+                            {/* Checkbox */}
+                            <td className="py-3.5 px-3 text-center align-top">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectDevice(device.id)}
+                                aria-label={`Select device ${device.id}`}
+                                className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                              />
+                            </td>
+
                             {/* Device ID */}
                             <td className="py-3.5 px-3.5 align-top">
                               <div className="flex items-center gap-1.5 font-bold text-white text-xs">

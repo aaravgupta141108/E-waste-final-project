@@ -45,6 +45,7 @@ import L from 'leaflet';
 import { FLEET_TRUCKS } from '../data/mockData';
 import { DeviceItem, FleetTruck } from '../types';
 import { FleetRegulatoryReportModal } from '../components/FleetRegulatoryReportModal';
+import { GoogleMapsFleetGISLayer } from '../components/GoogleMapsFleetGISLayer';
 
 // Fix Leaflet default icon paths in bundler environments to prevent 404s
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -803,6 +804,9 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
   const [selectedForecastDay, setSelectedForecastDay] = useState<number>(1);
   const [allocationToast, setAllocationToast] = useState<string | null>(null);
 
+  // Map Engine: 'google' (Google Maps Platform API) or 'leaflet' (DarkOps Leaflet)
+  const [mapEngine, setMapEngine] = useState<'google' | 'leaflet'>('google');
+
   // Leaflet Map Refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -1479,6 +1483,36 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
                 </div>
               )}
 
+              {/* Map Engine Toggle: Google Maps vs Leaflet */}
+              <div className="flex items-center rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setMapEngine('google')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1.5 ${
+                    mapEngine === 'google'
+                      ? 'bg-purple-900/70 text-purple-200 border border-purple-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Google Maps Platform API with real-time GPS fleet telemetry"
+                >
+                  <Globe className="w-3 h-3 text-purple-400" />
+                  <span>Google Maps API</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapEngine('leaflet')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1.5 ${
+                    mapEngine === 'leaflet'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Leaflet DarkOps Vector Map"
+                >
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  <span>Leaflet</span>
+                </button>
+              </div>
+
               {/* [Live Map] / [GIS Grid] Toggle Pill */}
               <div className="flex items-center rounded-lg bg-slate-950 p-0.5 border border-slate-800">
                 <button
@@ -1520,8 +1554,29 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
           </div>
 
           {/* Map Canvas Container */}
-          <div className="relative flex-1 w-full bg-[#0b1320] overflow-hidden">
-            <div ref={mapContainerRef} className="w-full h-full" />
+          <div className="relative flex-1 w-full bg-[#0b1320] overflow-hidden min-h-[580px]">
+            {/* Google Maps Platform API Layer */}
+            {mapEngine === 'google' && (
+              <div className="w-full h-full min-h-[580px]">
+                <GoogleMapsFleetGISLayer
+                  trucks={trucks}
+                  selectedTruckId={selectedTruckId}
+                  onSelectTruck={(id) => setSelectedTruckId(id)}
+                  hubs={LOGISTICS_HUBS}
+                  recyclers={RECYCLING_FACILITIES}
+                  activeLayers={{
+                    traffic: activeLayers.traffic,
+                    hubs: activeLayers.hubs,
+                    recyclers: activeLayers.recyclers,
+                    corridors: true
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Leaflet DarkOps Map Layer */}
+            <div className={mapEngine === 'leaflet' ? 'w-full h-full' : 'hidden'}>
+              <div ref={mapContainerRef} className="w-full h-full" />
 
             {/* Top-Left Zoom Controls */}
             <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 shadow-md">
@@ -1846,6 +1901,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
 

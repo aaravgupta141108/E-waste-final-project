@@ -116,9 +116,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const cleanId = officerId.trim().toUpperCase();
     const cleanPass = officerPassword.trim().toLowerCase();
 
-    // Password must be 'maitri'
+    // Password verification
     if (cleanPass !== 'maitri') {
-      setOfficerError('Invalid statutory password. The access password for all official personnel is "maitri".');
+      setOfficerError('Invalid statutory password. Please enter your authorized Department credentials.');
       return;
     }
 
@@ -279,19 +279,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
           {/* Right Trust & Direct Access Cluster */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="hidden md:flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-slate-300">CPCB Rule 19 Verified</span>
             </div>
-            <button
-              type="button"
-              onClick={handleDemoCitizenLogin}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-medium text-slate-200 border border-slate-700 hover:border-emerald-500/50 transition flex items-center gap-1.5 shadow-sm"
-              title="Quick demo access with pre-loaded consignments"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Public Portal Demo</span>
-            </button>
           </div>
         </div>
       </header>

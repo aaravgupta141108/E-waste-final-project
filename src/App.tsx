@@ -409,6 +409,26 @@ export default function App() {
     );
   };
 
+  const handleBatchUpdateDeviceStatus = (
+    deviceIds: string[],
+    newStatus: DeviceItem['status'],
+    extraData?: Partial<DeviceItem>
+  ) => {
+    setDevices((prev) =>
+      prev.map((d) => {
+        if (deviceIds.includes(d.id)) {
+          return {
+            ...d,
+            status: newStatus,
+            updatedAt: new Date().toLocaleString(),
+            ...(extraData || {})
+          };
+        }
+        return d;
+      })
+    );
+  };
+
   const handleResolveAlert = (alertId: string) => {
     setAlerts((prev) =>
       prev.map((a) => (a.id === alertId ? { ...a, resolved: true } : a))
@@ -624,6 +644,7 @@ export default function App() {
                 devices={devices}
                 onResolveFlag={(dId) => handleResolveFlag(dId)}
                 onClearAllFlags={handleClearAllFlags}
+                onBatchUpdateStatus={handleBatchUpdateDeviceStatus}
                 reminders={reminders}
                 onAddReminder={handleAddReminder}
                 onDeleteReminder={handleDeleteReminder}
@@ -659,6 +680,8 @@ export default function App() {
             currentUser={currentUser}
             devices={devices}
             onResolveFlag={(dId) => handleResolveFlag(dId)}
+            onClearAllFlags={handleClearAllFlags}
+            onBatchUpdateStatus={handleBatchUpdateDeviceStatus}
             reminders={reminders}
             onAddReminder={handleAddReminder}
             onDeleteReminder={handleDeleteReminder}
