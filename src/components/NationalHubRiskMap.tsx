@@ -200,28 +200,21 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
         preferCanvas: true
       });
 
-      // 1. CARTO Voyager Raster Tiles Layer (Clean national GIS)
+      // Primary CARTO Voyager Raster Tiles Layer (User Key: cb1_4sqy_1_15a3fad41d4a776cdaf03ad0)
       const voyagerUrl = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${cartoApiKey}`;
       const voyagerLayer = L.tileLayer(voyagerUrl, {
         maxZoom: 19,
-        attribution: 'Leaflet | CARTO Voyager © OpenStreetMap'
+        attribution: 'Leaflet | CARTO Voyager © OpenStreetMap',
+        crossOrigin: true
       });
+
+      voyagerLayer.on('tileerror', () => {
+        // Instant reliable fallback if network is restricted
+        voyagerLayer.setUrl('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+      });
+
+      voyagerLayer.addTo(map);
       voyagerTileLayerRef.current = voyagerLayer;
-
-      // 2. CARTO Dark Matter Raster Tiles Layer (Dark ops vector blueprint styling)
-      const darkUrl = `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${cartoApiKey}`;
-      const darkLayer = L.tileLayer(darkUrl, {
-        maxZoom: 19,
-        attribution: 'Leaflet | CARTO Dark Matter © OpenStreetMap'
-      });
-      darkVectorTileLayerRef.current = darkLayer;
-
-      // Add default tile layer
-      if (mapViewMode === 'carto_gis') {
-        voyagerLayer.addTo(map);
-      } else {
-        darkLayer.addTo(map);
-      }
 
       const markersGroup = L.layerGroup().addTo(map);
       markersLayerRef.current = markersGroup;
@@ -237,37 +230,18 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
         voyagerTileLayerRef.current = null;
-        darkVectorTileLayerRef.current = null;
         markersLayerRef.current = null;
       }
     };
   }, []);
 
-  // Smoothly swap tile layers without re-instantiating the map or dropping frames
+  // When switching between GIS and Vector Grid mode, invalidate map size to ensure crisp 60fps rendering without re-fetching tiles
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    const voyagerLayer = voyagerTileLayerRef.current;
-    const darkLayer = darkVectorTileLayerRef.current;
-
-    if (mapViewMode === 'carto_gis') {
-      if (darkLayer && map.hasLayer(darkLayer)) {
-        map.removeLayer(darkLayer);
-      }
-      if (voyagerLayer && !map.hasLayer(voyagerLayer)) {
-        voyagerLayer.addTo(map);
-      }
-    } else {
-      if (voyagerLayer && map.hasLayer(voyagerLayer)) {
-        map.removeLayer(voyagerLayer);
-      }
-      if (darkLayer && !map.hasLayer(darkLayer)) {
-        darkLayer.addTo(map);
-      }
+    if (mapInstanceRef.current) {
+      requestAnimationFrame(() => {
+        mapInstanceRef.current?.invalidateSize();
+      });
     }
-
-    map.invalidateSize();
   }, [mapViewMode]);
 
   // Refresh markers based on displayed hubs with hardware-accelerated styling (zero lag)
@@ -475,11 +449,7 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
           <div className="w-full relative">
             <div
               ref={mapContainerRef}
-              className={`w-full h-[540px] rounded-xl overflow-hidden border border-slate-800 z-0 relative shadow-inner ${
-                mapViewMode === 'carto_gis'
-                  ? 'brightness-[0.92] contrast-[1.08]'
-                  : 'brightness-[0.88] contrast-[1.15]'
-              }`}
+              className="w-full h-[540px] rounded-xl overflow-hidden border border-slate-800 z-0 relative shadow-inner"
             />
 
             {/* Tactical Vector Grid Overlay (When in Vector Grid Mode) */}

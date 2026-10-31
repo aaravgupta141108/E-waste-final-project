@@ -23,7 +23,8 @@ import {
   UserCheck,
   BadgeCheck,
   Info,
-  Clock
+  Clock,
+  Scale
 } from 'lucide-react';
 import { ThreeCanvas } from '../components/ThreeCanvas';
 import { DEMO_USERS } from '../data/mockData';
@@ -253,33 +254,52 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Header */}
-      <header className="relative z-10 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Leaf className="w-5 h-5 text-emerald-400" />
+      <header className="relative z-10 w-full border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
+        <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                <Leaf className="w-5 h-5 text-emerald-400" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base tracking-tight text-white">
+                  BHARAT <span className="text-emerald-400">E-WASTE</span> HUB
+                </span>
+                <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                  Government of India
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                National Statutory Tracking, NIST Data Erasure, and EPR Governance
+              </p>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-tight text-white">
-                BHARAT <span className="text-emerald-400">E-WASTE</span> HUB
-              </span>
-              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
-                Government of India
-              </span>
+
+          {/* Right Trust & Direct Access Cluster */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="hidden md:flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-slate-300">CPCB Rule 19 Verified</span>
             </div>
-            <p className="text-[11px] text-slate-400">
-              National Statutory Tracking, NIST Data Erasure, and EPR Governance
-            </p>
+            <button
+              type="button"
+              onClick={handleDemoCitizenLogin}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-medium text-slate-200 border border-slate-700 hover:border-emerald-500/50 transition flex items-center gap-1.5 shadow-sm"
+              title="Quick demo access with pre-loaded consignments"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Public Portal Demo</span>
+            </button>
           </div>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-[1680px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-7 relative z-10 space-y-6">
+      <main className="flex-1 max-w-[1680px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10 space-y-8">
         {/* Top Hero Headline Banner - Aligns Both Cards Horizontally */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800/80 pb-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800/80 pb-5">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -315,9 +335,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         {/* Symmetrical Dual-Console Grid - 3D Model and Credentials Aligned */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
           {/* Left Side: 3D Model Spatial Telemetry Card */}
-          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[580px] relative overflow-hidden group">
+          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[640px] relative overflow-hidden group">
             {/* Card Top Header - Mirroring the Access Portal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
@@ -369,10 +389,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           </div>
 
           {/* Right Side: Role Selector & Login Console */}
-          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[580px] space-y-5">
+          <div className="lg:col-span-6 bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl flex flex-col justify-between h-full min-h-[640px] relative overflow-hidden">
 
           {/* Main Navigation Tabs */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3.5">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <div>
               <h2 className="text-base font-bold text-white">Access Portal</h2>
               <p className="text-xs text-slate-400">
@@ -416,6 +436,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
           </div>
 
+          {/* Tab Content Container Aligned Vertically */}
+          <div className="flex-1 py-4 flex flex-col justify-center">
           {/* TAB 1: STATUTORY OFFICERS */}
           {activeTab === 'officer' && (
             <div className="space-y-4">
@@ -493,6 +515,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
                       required
                     />
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-amber-400/90 font-mono">
+                    <Info className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>Statutory Access Password: <strong className="text-white bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">maitri</strong></span>
                   </div>
                 </div>
 
@@ -823,18 +849,202 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               })}
             </div>
           )}
+          </div>
 
           {/* Security & Statutory Compliance Footnote */}
-          <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
-            <span className="flex items-center gap-1">
-              <Lock className="w-3 h-3 text-emerald-400" />
-              <span>DPDP Act 2023 & CPCB EPR Statutory Verified</span>
+          <div className="pt-3.5 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>DPDP Act 2023 &amp; CPCB EPR Statutory Verified</span>
             </span>
-            <span className="font-mono text-[10px]">Server: Asia-South1 (Mumbai)</span>
+            <span className="font-mono text-[10px] text-slate-400">Server: Asia-South1 (Mumbai)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Four Statutory Circular Governance Pillars */}
+      <div className="pt-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                Statutory Architecture &amp; Core Platform Pillars
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              CPCB Rule 19 &amp; MoEFCC Gazette Notification G.S.R. 699(E) Mandated Traceability
+            </p>
+          </div>
+          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-slate-900 text-slate-300 border border-slate-800 self-start sm:self-auto font-bold">
+            ZERO DISCREPANCY FRAMEWORK
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 transition group space-y-2 shadow-lg">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition">
+              NIST SP 800-88 Purge
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Cryptographic sanitization and ATA Secure Erase with tamper-evident SHA-256 certificate generation before physical shredding.
+            </p>
+            <span className="text-[10px] font-mono text-emerald-400 font-bold block pt-1">
+              99.8% Data Scrub Integrity
+            </span>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 transition group space-y-2 shadow-lg">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Scale className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-cyan-300 transition">
+              NABL Calibrated IoT Scales
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Direct gross-tare telemetry integration across state weighbridges, flagging discrepancies greater than 5% automatically.
+            </p>
+            <span className="text-[10px] font-mono text-cyan-400 font-bold block pt-1">
+              ±0.05% Precision Tolerance
+            </span>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 transition group space-y-2 shadow-lg">
+            <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-purple-300 transition">
+              DoT CEIR Sanchar Saathi
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Real-time central identity cross-check validating IMEI integrity and quarantining stolen handsets from illegal refurbishing.
+            </p>
+            <span className="text-[10px] font-mono text-purple-400 font-bold block pt-1">
+              National Stolen DB Interlock
+            </span>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-amber-500/40 transition group space-y-2 shadow-lg">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition">
+              Instant Green Buyback DBT
+            </h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Algorithmic payout computation passing 70–75% of residual secondary reuse value straight to citizen UPI wallets upon intake.
+            </p>
+            <span className="text-[10px] font-mono text-amber-400 font-bold block pt-1">
+              ₹18.4 Cr Disbursed Nationally
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Live National Network Telemetry Strip */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 text-xs shadow-inner">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+          <div>
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>National E-Waste Circular Grid Active</span>
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                LIVE 60 FPS
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Synchronized across 22 State PCB Nodes • CPCB Parivesh Gateway v3.8
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 sm:gap-6 text-slate-300 font-mono text-[11px] overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+          <div>
+            <span className="text-slate-500 text-[10px] block font-sans">Active Transit Depots</span>
+            <strong>22 State Hubs</strong>
+          </div>
+          <div>
+            <span className="text-slate-500 text-[10px] block font-sans">EPR Registered Recyclers</span>
+            <strong className="text-cyan-300">10 Mega Refineries</strong>
+          </div>
+          <div>
+            <span className="text-slate-500 text-[10px] block font-sans">Security Standard</span>
+            <strong className="text-purple-300">FIDO2 / WebAuthn</strong>
+          </div>
+          <div>
+            <span className="text-slate-500 text-[10px] block font-sans">Network Latency</span>
+            <strong className="text-emerald-400">24ms • 99.98%</strong>
           </div>
         </div>
       </div>
     </main>
+
+    {/* Official Government of India Statutory Portal Footer */}
+    <footer className="w-full border-t border-slate-800/80 bg-slate-950 mt-12">
+      <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-24 space-y-8 text-xs text-slate-400">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div className="md:col-span-5 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold">
+                <Leaf className="w-4 h-4 text-emerald-400" />
+              </div>
+              <span className="font-bold text-white text-sm tracking-tight">
+                BHARAT E-WASTE GOVERNANCE PORTAL
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed max-w-md">
+              An authoritative digital initiative under the Ministry of Environment, Forest &amp; Climate Change (MoEFCC) and Central Pollution Control Board (CPCB) for statutory e-waste tracking, NIST-certified data erasure, and circular secondary material recovery.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400 pt-1">
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">CPCB Reg: B-29016/(EPR)/18/WM-III</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">ISO 14001:2015</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">NIST SP 800-88 R2</span>
+            </div>
+          </div>
+
+          <div className="md:col-span-3 space-y-2 text-[11px]">
+            <span className="font-bold text-slate-200 block text-xs uppercase tracking-wider font-mono">
+              Statutory Links &amp; Gazettes
+            </span>
+            <ul className="space-y-1.5 text-slate-400">
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">CPCB National EPR Portal</span></li>
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">Sanchar Saathi (DoT / CEIR Gateway)</span></li>
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">E-Waste (Management) Rules 2022</span></li>
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">Digital Personal Data Protection Act 2023</span></li>
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">State PCB Authorizations (Form 1 Filing)</span></li>
+              <li><span className="hover:text-emerald-400 transition cursor-pointer">NABL Calibration Accredited Facilities</span></li>
+            </ul>
+          </div>
+
+          <div className="md:col-span-4 space-y-2.5 text-[11px]">
+            <span className="font-bold text-slate-200 block text-xs uppercase tracking-wider font-mono">
+              Citizen Grievance &amp; National Helpdesk
+            </span>
+            <p className="text-slate-300">
+              Toll-Free National Helpline: <strong className="text-white font-mono text-xs">1800-11-EWASTE (392783)</strong>
+            </p>
+            <p className="text-slate-300">
+              Official Grievance Email: <strong className="text-emerald-400 font-mono">grievance@ewaste.gov.in</strong>
+            </p>
+            <p className="text-slate-500 text-[10px] leading-relaxed pt-1">
+              Statutory Grievance Redressal Officer: CPCB Parivesh Bhawan, East Arjun Nagar, Delhi 110032. Operating hours: Monday to Saturday 09:00 - 18:00 IST.
+            </p>
+            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+              <span>Emergency Hazmat Spill / Battery Puncture:</span>
+              <strong className="text-rose-400 font-mono">Call 112 / 1077</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] font-mono text-slate-500">
+          <span>© 2026 Bharat E-Waste Hub • Ministry of Environment, Forest &amp; Climate Change (MoEFCC), Govt. of India.</span>
+          <span>Designed &amp; Hosted on National NIC Cloud Infrastructure • SHA-256 Merkle Ledger Anchored</span>
+        </div>
+      </div>
+    </footer>
 
       {/* Web Authentication API / Biometric Passkey Modal */}
       {biometricModalOpen && (

@@ -9,7 +9,6 @@
   contain: layout paint;
 }
 .leaflet-tile {
-  filter: brightness(0.92) contrast(1.08);
   will-change: transform;
 }
 .custom-truck-marker,

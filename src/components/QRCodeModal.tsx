@@ -14,7 +14,10 @@ import {
   Building,
   CheckCircle2,
   Lock,
-  Layers
+  Layers,
+  Eye,
+  Camera,
+  Info
 } from 'lucide-react';
 import { DeviceItem } from '../types';
 
@@ -40,6 +43,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   const [scannedResult, setScannedResult] = useState<DeviceItem | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isPrintPreview, setIsPrintPreview] = useState(false);
 
   // Synchronize when targetDeviceId changes or modal opens
   useEffect(() => {
@@ -88,8 +92,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-emerald-500/40 rounded-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className={`w-full max-w-2xl bg-slate-900 border border-emerald-500/40 rounded-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden transition-all ${isPrintPreview ? 'qr-print-preview-mode max-w-xl border-emerald-400 bg-slate-950' : ''}`}>
         {/* Header */}
         <div className="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -100,65 +104,195 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-white">Physical Bin &amp; Custody QR Linkage</h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
-                  Case {currentDevice.id} Only
+                  {isPrintPreview ? 'Print Preview Active' : `Case ${currentDevice.id} Only`}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Statutory digital chain of custody for collection bins &amp; pallets of the given case
+                {isPrintPreview
+                  ? 'Showing high-contrast, print-ready format with non-essential chrome hidden'
+                  : 'Statutory digital chain of custody for collection bins & pallets of the given case'}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsPrintPreview(!isPrintPreview)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border ${
+                isPrintPreview
+                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:text-white'
+              }`}
+              title="Toggle print-ready format hiding non-essential modal UI"
+            >
+              <Eye className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{isPrintPreview ? 'Exit Preview' : 'Print Preview'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Tab mode switcher */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 pt-2">
-          <button
-            onClick={() => setActiveMode('generate')}
-            className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-              activeMode === 'generate'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            <span>Digital Custody Tag &amp; Bin QR</span>
-          </button>
-          <button
-            onClick={() => setActiveMode('printable_tag')}
-            className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-              activeMode === 'printable_tag'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Printable QR Asset Tag (Physical Label)</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold font-mono">
-              Label
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveMode('scan')}
-            className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
-              activeMode === 'scan'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Scan className="w-3.5 h-3.5" />
-            <span>Field Custody Auditor Scanner</span>
-          </button>
-        </div>
+        {/* Tab mode switcher - Hidden in print preview mode */}
+        {!isPrintPreview && (
+          <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 pt-2">
+            <button
+              onClick={() => setActiveMode('generate')}
+              className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+                activeMode === 'generate'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Digital Custody Tag &amp; Bin QR</span>
+            </button>
+            <button
+              onClick={() => setActiveMode('printable_tag')}
+              className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+                activeMode === 'printable_tag'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Printable QR Asset Tag (Physical Label)</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-bold font-mono">
+                Label
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveMode('scan')}
+              className={`pb-2.5 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+                activeMode === 'scan'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Scan className="w-3.5 h-3.5" />
+              <span>Field Custody Auditor Scanner</span>
+            </button>
+          </div>
+        )}
 
         {/* Modal body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-          {activeMode === 'generate' ? (
+          {/* Print Preview Mode UI */}
+          {isPrintPreview ? (
+            <div className="space-y-4 print-preview-container animate-in fade-in duration-200">
+              <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/40 flex items-center justify-between text-xs text-emerald-300">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Print Preview Active: Non-essential UI hidden for high-contrast thermal &amp; laser output.</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Now</span>
+                  </button>
+                  <button
+                    onClick={() => setIsPrintPreview(false)}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+                  >
+                    Exit Preview
+                  </button>
+                </div>
+              </div>
+
+              {/* High-Contrast Print-Ready Tag Card */}
+              <div className="bg-white text-slate-950 p-6 rounded-2xl border-4 border-slate-950 shadow-2xl max-w-md mx-auto font-sans print-include">
+                <div className="border-b-2 border-slate-950 pb-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] font-mono font-bold tracking-widest uppercase block text-emerald-800">
+                      GOVERNMENT OF INDIA • CPCB / MoEFCC
+                    </span>
+                    <h3 className="text-sm font-black tracking-tight text-slate-950">
+                      NATIONAL E-WASTE ASSET TAG
+                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-950 text-white uppercase">
+                      STATUTORY
+                    </span>
+                    <div className="text-[10px] font-mono font-bold text-slate-800 mt-0.5">
+                      FORM 6
+                    </div>
+                  </div>
+                </div>
+
+                <div className="py-4 grid grid-cols-12 gap-3 items-center">
+                  <div className="col-span-5 flex flex-col items-center border-r-2 border-slate-200 pr-2">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+                        qrPayload
+                      )}`}
+                      alt="Print Ready Asset Tag QR"
+                      className="w-32 h-32 border-2 border-slate-950 p-1 rounded"
+                    />
+                    <span className="text-[10px] font-mono font-black mt-1 text-slate-950">
+                      {currentDevice.id}
+                    </span>
+                  </div>
+
+                  <div className="col-span-7 space-y-1 text-[11px] leading-tight">
+                    <div>
+                      <span className="text-[9px] font-mono text-slate-500 uppercase block">Equipment Model</span>
+                      <strong className="text-xs font-black text-slate-950">
+                        {currentDevice.brand} {currentDevice.model}
+                      </strong>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1 pt-1 font-mono text-[10px]">
+                      <div>
+                        <span className="text-[8px] text-slate-500 uppercase block font-sans">Category</span>
+                        <span className="font-bold text-slate-900">{currentDevice.category}</span>
+                      </div>
+                      <div>
+                        <span className="text-[8px] text-slate-500 uppercase block font-sans">Scale Weight</span>
+                        <span className="font-bold text-slate-900">{currentDevice.intakeWeightKg} kg</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 font-mono text-[10px]">
+                      <span className="text-[8px] text-slate-500 uppercase block font-sans">Serial / IMEI</span>
+                      <span className="font-bold text-slate-900 truncate block">
+                        {currentDevice.imei || currentDevice.serialNumber}
+                      </span>
+                    </div>
+
+                    <div className="pt-1 grid grid-cols-2 gap-1 font-mono text-[9px] border-t border-slate-200">
+                      <div>
+                        <span className="text-[8px] text-slate-500 font-sans">Bin:</span>
+                        <span className="font-bold text-slate-900">{caseBinId}</span>
+                      </div>
+                      <div>
+                        <span className="text-[8px] text-slate-500 font-sans">Pallet:</span>
+                        <span className="font-bold text-slate-900">{casePalletId}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t-2 border-slate-950 pt-2 text-center">
+                  <div className="text-[9px] font-mono tracking-widest font-black text-slate-950">
+                    *CPCB-{currentDevice.id}-TAG*
+                  </div>
+                  <div className="text-[8px] font-mono text-slate-600 mt-1 flex items-center justify-between">
+                    <span>SEAL: {caseSealNumber}</span>
+                    <span className="font-bold text-rose-800 uppercase">DO NOT REMOVE</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeMode === 'generate' ? (
             <div className="space-y-4">
               {/* Scoped Case Banner */}
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -309,6 +443,23 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                     <strong className="text-cyan-400 block truncate">{currentDevice.recyclerName || 'EcoRecycle Apex Solutions'}</strong>
                     <span className="text-slate-400 text-[10px]">{casePalletId}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Camera Alignment & Scanning Guide Help Tip */}
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-cyan-500/30 text-xs space-y-2 shadow-inner">
+                <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <Camera className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>Camera Alignment &amp; Asset Tag Capture Guide</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  To ensure instant recognition by handheld field terminals and smartphone optical scanners, center the entire QR asset tag squarely within your camera&apos;s viewfinder frame. Maintain a perpendicular angle and a distance of 15–25 cm until the high-contrast corner alignment marks snap into focus.
+                </p>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-cyan-950/50 border border-cyan-800/60 text-[11px] text-cyan-200">
+                  <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>
+                    <strong className="text-cyan-300">Pro-tip:</strong> Keep your device stable and in good lighting.
+                  </span>
                 </div>
               </div>
             </div>
@@ -462,6 +613,21 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                       Scan {d.id}
                     </button>
                   ))}
+                </div>
+
+                {/* Camera Alignment Guidance Tip */}
+                <div className="mt-4 p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-left text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-cyan-300 font-semibold text-[11px]">
+                    <Camera className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Optical Lens &amp; Field Alignment Instructions</span>
+                  </div>
+                  <p className="text-slate-400 text-[11px]">
+                    Align the optical sensor perpendicular to the physical bin label. Maintain steady focus until the four corner registration squares illuminate green.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1 text-cyan-300 font-mono text-[10px]">
+                    <Info className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span><strong>Pro-tip:</strong> Keep your device stable and in good lighting.</span>
+                  </div>
                 </div>
               </div>
 

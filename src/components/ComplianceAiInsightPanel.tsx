@@ -16,7 +16,6 @@ import {
   CheckCircle2,
   Layers
 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { DeviceItem } from '../types';
 import { STATE_COMPLIANCE_DATA, StateComplianceData } from './ComplianceHeatmap';
 
@@ -113,48 +112,38 @@ export const ComplianceAiInsightPanel: React.FC<ComplianceAiInsightPanelProps> =
     );
   }, [compositeScore, flaggedCount, avgStateAttainment, highRiskStates, devices]);
 
-  // Handle AI regeneration via Gemini SDK with seamless fallback
+  // Handle AI regeneration via server-side Gemini API proxy with seamless local fallback
   const handleRegenerateAnalysis = async () => {
     setIsGenerating(true);
     setCustomAiText(null);
 
     try {
-      const apiKey =
-        (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-        (import.meta as any)?.env?.VITE_GEMINI_API_KEY ||
-        '';
+      const response = await fetch('/api/compliance-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          compositeScore,
+          scoreRatingLabel: scoreRating.label,
+          flaggedCount,
+          totalDevices,
+          avgStateAttainment,
+          highRiskStates: highRiskStates.map((s) => `${s.state} (${s.collectionPerformancePct.toFixed(1)}%)`).join(', '),
+          surplusStates: surplusStates.map((s) => `${s.state} (${s.collectionPerformancePct.toFixed(1)}%)`).join(', '),
+          wipeSuccessPct
+        })
+      });
 
-      if (apiKey) {
-        const ai = new GoogleGenAI({ apiKey });
-        const prompt = `You are the lead Central Pollution Control Board (CPCB) Regulatory AI Auditor under the E-Waste (Management) Rules 2022.
-Analyze the following live platform compliance telemetry:
-- Composite Regional Audit Risk Score: ${compositeScore}/100 (${scoreRating.label})
-- Open Quarantined / Flagged Units: ${flaggedCount} out of ${totalDevices} total registered devices
-- Average State EPR Quota Attainment: ${avgStateAttainment}%
-- High-Risk Lagging States (<85% attainment): ${highRiskStates.map((s) => `${s.state} (${s.collectionPerformancePct.toFixed(1)}%)`).join(', ')}
-- Surplus Performing States (>=95% attainment): ${surplusStates.map((s) => `${s.state} (${s.collectionPerformancePct.toFixed(1)}%)`).join(', ')}
-- NIST SP 800-88 Data Scrub Integrity: ${wipeSuccessPct}%
-
-Provide a concise, 3-paragraph executive regulatory assessment explaining:
-1. The primary causes driving the current regional risk score.
-2. An analysis of the gap between surplus hubs and lagging states with informal leakage risk.
-3. 2-3 specific, actionable CPCB regulatory steps the auditor should execute immediately.
-Keep the tone authoritative, government-grade, and statutory.`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt
-        });
-
-        if (response.text) {
-          setCustomAiText(response.text);
-          setLastGeneratedAt('Just now (Live Gemini 3.8 Flash)');
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.text) {
+          setCustomAiText(data.text);
+          setLastGeneratedAt('Just now (Gemini 3.8 Flash)');
           setIsGenerating(false);
           return;
         }
       }
     } catch (err) {
-      console.warn('Gemini API call skipped or errored, using dynamic synthesis engine:', err);
+      console.warn('Backend Gemini API call skipped or errored, using dynamic synthesis engine:', err);
     }
 
     // Fallback animation delay for local synthesis engine

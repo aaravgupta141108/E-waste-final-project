@@ -54,7 +54,10 @@ import { NationalHubRiskMap } from '../components/NationalHubRiskMap';
 import { ComplianceAiInsightPanel } from '../components/ComplianceAiInsightPanel';
 import { BulkNotifyHubsModal } from '../components/BulkNotifyHubsModal';
 import { QuarterlySummaryModal } from '../components/QuarterlySummaryModal';
-import { MapPin } from 'lucide-react';
+import { BulkManifestQrModal } from '../components/BulkManifestQrModal';
+import { AuditPassFailTrendChart } from '../components/AuditPassFailTrendChart';
+import { AuditHistoryTimeline } from '../components/AuditHistoryTimeline';
+import { MapPin, QrCode } from 'lucide-react';
 
 export interface DeviceLifecycleEvent {
   id: string;
@@ -104,6 +107,7 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [showDigitalAuditTrailModal, setShowDigitalAuditTrailModal] = useState(false);
   const [showBulkNotifyModal, setShowBulkNotifyModal] = useState(false);
   const [showQuarterlySummaryModal, setShowQuarterlySummaryModal] = useState(false);
+  const [showBulkManifestQrModal, setShowBulkManifestQrModal] = useState(false);
   const [quickActionToast, setQuickActionToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
   const [storedOverridesCount, setStoredOverridesCount] = useState<number>(() => getStoredOverrides().length);
   const [selectedHeatmapState, setSelectedHeatmapState] = useState<StateComplianceData | null>(null);
@@ -603,6 +607,18 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowBulkManifestQrModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-bold text-white transition shadow-lg shadow-purple-600/30 flex items-center gap-2 border border-purple-400/50"
+              title="Generate CPCB bulk manifest QR aggregating pending audit summary for digital verification"
+            >
+              <QrCode className="w-3.5 h-3.5 text-white" />
+              <span>Bulk Manifest QR</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-950 text-purple-200 border border-purple-800 font-bold">
+                Rule 19
+              </span>
+            </button>
+
             <button
               onClick={() => setShowDigitalAuditTrailModal(true)}
               className="px-3.5 py-2 rounded-xl bg-purple-950/90 hover:bg-purple-900/90 text-xs font-semibold text-purple-200 hover:text-white transition shadow flex items-center gap-2 border border-purple-600/50"
@@ -1724,11 +1740,20 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
         </div>
       )}
 
-      {/* Tab: Annual Audit History for State-Registered Hubs */}
+      {/* Tab: Annual Audit History, 12-Month Pass/Fail Trend & Step Timeline */}
       {activeTab === 'audit_history' && (
-        <AnnualAuditHistoryTable
-          onExportAuditReport={() => setShowForm6Modal(true)}
-        />
+        <div className="space-y-6">
+          {/* Recharts Bar Chart Visualizing Audit Pass/Fail Trend over last 12 months */}
+          <AuditPassFailTrendChart />
+
+          {/* Interactive Vertical Step Timeline for Past CPCB Verification Events */}
+          <AuditHistoryTimeline />
+
+          {/* Annual Audit History Table for State-Registered Hubs */}
+          <AnnualAuditHistoryTable
+            onExportAuditReport={() => setShowForm6Modal(true)}
+          />
+        </div>
       )}
 
       {/* Tab: Compliance History Log */}
@@ -2034,6 +2059,16 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           currentUser={currentUser}
           devices={devices}
           onClose={() => setShowQuarterlySummaryModal(false)}
+        />
+      )}
+
+      {/* CPCB Bulk Manifest QR Generation Modal for Digital Verification */}
+      {showBulkManifestQrModal && (
+        <BulkManifestQrModal
+          isOpen={showBulkManifestQrModal}
+          onClose={() => setShowBulkManifestQrModal(false)}
+          devices={devices}
+          currentUser={currentUser}
         />
       )}
 
