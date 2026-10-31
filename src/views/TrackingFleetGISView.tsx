@@ -805,12 +805,26 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
   const [allocationToast, setAllocationToast] = useState<string | null>(null);
 
   // Map Engine: 'google' (Google Maps Platform API) or 'leaflet' (DarkOps Leaflet)
-  const [mapEngine, setMapEngine] = useState<'google' | 'leaflet'>('google');
+  const defaultMapEngine: 'google' | 'leaflet' =
+    (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ? 'google' : 'leaflet';
+  const [mapEngine, setMapEngine] = useState<'google' | 'leaflet'>(defaultMapEngine);
 
   // Leaflet Map Refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Invalidate Leaflet map size when engine switches to leaflet
+  useEffect(() => {
+    if (mapEngine === 'leaflet' && mapInstanceRef.current) {
+      const timer = setTimeout(() => {
+        try {
+          mapInstanceRef.current?.invalidateSize();
+        } catch (_) {}
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [mapEngine]);
 
   // Dedicated LayerGroups for high-performance toggling without marker recreation
   const polylineLayerRef = useRef<L.LayerGroup | null>(null);
@@ -1063,22 +1077,31 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
     // Build Static Hubs Layer Once
     LOGISTICS_HUBS.forEach((hub) => {
-      const marker = createHubMarker(hub);
-      hubMarkersRef.current[hub.id] = marker;
-      hubsLayer.addLayer(marker);
+      if (hub.coords && !isNaN(hub.coords[0]) && !isNaN(hub.coords[1])) {
+        const marker = createHubMarker(hub);
+        hubMarkersRef.current[hub.id] = marker;
+        hubsLayer.addLayer(marker);
+      }
     });
 
     // Build Static Recyclers Layer Once
     RECYCLING_FACILITIES.forEach((facility) => {
-      const marker = createRecyclerMarker(facility);
-      recyclerMarkersRef.current[facility.id] = marker;
-      recyclersLayer.addLayer(marker);
+      if (facility.coords && !isNaN(facility.coords[0]) && !isNaN(facility.coords[1])) {
+        const marker = createRecyclerMarker(facility);
+        recyclerMarkersRef.current[facility.id] = marker;
+        recyclersLayer.addLayer(marker);
+      }
     });
 
     // Build Static Traffic Corridors Layer Once
     TRAFFIC_CORRIDORS.forEach((corridor) => {
+      const validWaypoints = (corridor.waypoints || []).filter(
+        (wp) => wp && !isNaN(wp[0]) && !isNaN(wp[1])
+      );
+      if (validWaypoints.length < 2) return;
+
       // Glow polyline
-      const glowLine = L.polyline(corridor.waypoints, {
+      const glowLine = L.polyline(validWaypoints, {
         color: corridor.color,
         weight: corridor.level === 'Heavy Congestion' ? 7 : 5,
         opacity: 0.35,
@@ -1087,7 +1110,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       trafficLayer.addLayer(glowLine);
 
       // Core polyline
-      const coreLine = L.polyline(corridor.waypoints, {
+      const coreLine = L.polyline(validWaypoints, {
         color: corridor.color,
         weight: 3,
         opacity: 0.9,
@@ -1126,6 +1149,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
     // Build Static State Nodes Layer Once
     GIS_STATES.forEach((st) => {
+      if (!st.coords || isNaN(st.coords[0]) || isNaN(st.coords[1])) return;
       const theme = getStatusTheme(st.recyclingRatePct);
       const html = `
         <div class="relative flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2 cursor-pointer select-none group">
@@ -1245,9 +1269,26 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       hazardCircleRef.current = null;
     }
 
+    // Safety helper: guards against Leaflet division by zero when container has 0 size
+    const safeFlyTo = (coords: [number, number], zoom: number, duration: number = 0.7) => {
+      if (!coords || isNaN(coords[0]) || isNaN(coords[1])) return;
+      try {
+        const size = map.getSize();
+        if (size && size.x > 0 && size.y > 0) {
+          map.flyTo(coords, zoom, { duration });
+        } else {
+          map.setView(coords, zoom);
+        }
+      } catch {
+        try {
+          map.setView(coords, zoom);
+        } catch (_) {}
+      }
+    };
+
     if (mapMode === 'gis') {
       // GIS Grid Mode: Zoom out to view entire India spatial grid
-      map.flyTo([22.8, 78.9], 5, { duration: 0.8 });
+      safeFlyTo([22.8, 78.9], 5, 0.8);
 
       // Show state nodes
       if (!map.hasLayer(stateLayer)) {
@@ -1261,8 +1302,10 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
     } else {
       // Live Map Mode: Focus on selected truck's route corridor
       const activeTruck = trucks.find((t) => t.id === selectedTruckId) || trucks[0];
-      const currentCoords = activeTruck.coordinates;
-      map.flyTo(currentCoords, 11, { duration: 0.7 });
+      const currentCoords = activeTruck?.coordinates;
+      if (currentCoords && !isNaN(currentCoords[0]) && !isNaN(currentCoords[1])) {
+        safeFlyTo(currentCoords, 11, 0.7);
+      }
 
       // Hide state nodes, show trucks
       if (map.hasLayer(stateLayer)) {
@@ -1274,6 +1317,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
       // Ensure truck markers exist in trucksLayer with updated selection icon
       trucks.forEach((truck) => {
+        if (!truck.coordinates || isNaN(truck.coordinates[0]) || isNaN(truck.coordinates[1])) return;
         const isSelected = truck.id === selectedTruckId;
         const icon = createTruckIcon(isSelected);
 
@@ -1294,9 +1338,13 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       });
 
       // Render Route Polylines for active truck
-      if (activeTruck.gpsWaypoints && activeTruck.gpsWaypoints.length > 1) {
+      const validWaypoints = (activeTruck?.gpsWaypoints || []).filter(
+        (wp) => wp && !isNaN(wp[0]) && !isNaN(wp[1])
+      );
+
+      if (validWaypoints.length > 1) {
         // Glow line
-        const glowLine = L.polyline(activeTruck.gpsWaypoints, {
+        const glowLine = L.polyline(validWaypoints, {
           color: '#10b981',
           weight: 6,
           opacity: 0.35
@@ -1304,7 +1352,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(glowLine);
 
         // Core line
-        const routeLine = L.polyline(activeTruck.gpsWaypoints, {
+        const routeLine = L.polyline(validWaypoints, {
           color: '#10b981',
           weight: 3.5,
           opacity: 0.95
@@ -1312,7 +1360,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(routeLine);
 
         // Origin
-        const originMarker = L.circleMarker(activeTruck.gpsWaypoints[0], {
+        const originMarker = L.circleMarker(validWaypoints[0], {
           radius: 4.5,
           color: '#10b981',
           fillColor: '#047857',
@@ -1322,7 +1370,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         polylineLayer.addLayer(originMarker);
 
         // Waypoints
-        activeTruck.gpsWaypoints.slice(1, -1).forEach((pt) => {
+        validWaypoints.slice(1, -1).forEach((pt) => {
           const wpMarker = L.circleMarker(pt, {
             radius: 3,
             color: '#38bdf8',
@@ -1335,7 +1383,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
 
         // Destination
         const destMarker = L.circleMarker(
-          activeTruck.gpsWaypoints[activeTruck.gpsWaypoints.length - 1],
+          validWaypoints[validWaypoints.length - 1],
           {
             radius: 5.5,
             color: '#38bdf8',
@@ -1348,7 +1396,7 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
       }
 
       // Ghazipur Hazard Zone Buffer
-      if (activeTruck.id === 'TRK-IND-01') {
+      if (activeTruck?.id === 'TRK-IND-01') {
         const hazardCircle = L.circle([28.6284, 77.3292], {
           radius: 3500,
           color: '#f43f5e',
@@ -1366,7 +1414,12 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
   useEffect(() => {
     trucks.forEach((truck) => {
       const marker = truckMarkersRef.current[truck.id];
-      if (marker) {
+      if (
+        marker &&
+        truck.coordinates &&
+        !isNaN(truck.coordinates[0]) &&
+        !isNaN(truck.coordinates[1])
+      ) {
         marker.setLatLng(truck.coordinates);
       }
     });
@@ -1382,7 +1435,9 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
         prevTrucks.map((truck) => {
           if (truck.status === 'At Collection Point') return truck;
 
-          const waypoints = truck.gpsWaypoints || [];
+          const waypoints = (truck.gpsWaypoints || []).filter(
+            (wp) => wp && !isNaN(wp[0]) && !isNaN(wp[1])
+          );
           if (waypoints.length < 2) return truck;
 
           const currentPct = truck.routeProgressPct ?? 50;
@@ -1399,8 +1454,16 @@ export const TrackingFleetGISView: React.FC<TrackingFleetGISViewProps> = React.m
           const p1 = waypoints[segmentIndex];
           const p2 = waypoints[segmentIndex + 1];
 
+          if (!p1 || !p2 || isNaN(p1[0]) || isNaN(p1[1]) || isNaN(p2[0]) || isNaN(p2[1])) {
+            return truck;
+          }
+
           const curLat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
           const curLng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+
+          if (isNaN(curLat) || isNaN(curLng)) {
+            return truck;
+          }
 
           return {
             ...truck,

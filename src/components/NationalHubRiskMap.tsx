@@ -278,6 +278,7 @@ export const NationalHubRiskMap: React.FC<NationalHubRiskMapProps> = ({
         iconAnchor: [12, 12]
       });
 
+      if (isNaN(hub.geo.lat) || isNaN(hub.geo.lng)) return;
       const marker = L.marker([hub.geo.lat, hub.geo.lng], { icon: customIcon });
 
       const popupHtml = `
