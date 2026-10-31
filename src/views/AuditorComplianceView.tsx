@@ -32,7 +32,11 @@ import {
   Eye,
   SlidersHorizontal,
   RotateCcw,
-  Shield
+  Shield,
+  MapPin,
+  QrCode,
+  XCircle,
+  Hourglass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
@@ -56,8 +60,7 @@ import { BulkNotifyHubsModal } from '../components/BulkNotifyHubsModal';
 import { QuarterlySummaryModal } from '../components/QuarterlySummaryModal';
 import { BulkManifestQrModal } from '../components/BulkManifestQrModal';
 import { AuditPassFailTrendChart } from '../components/AuditPassFailTrendChart';
-import { AuditHistoryTimeline } from '../components/AuditHistoryTimeline';
-import { MapPin, QrCode } from 'lucide-react';
+import { AuditHistoryTimeline, ComplianceEventStatus } from '../components/AuditHistoryTimeline';
 
 export interface DeviceLifecycleEvent {
   id: string;
@@ -115,6 +118,9 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
   const [complianceSearch, setComplianceSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<'all' | 'intake' | 'ceir' | 'wipe' | 'scale' | 'payout' | 'intervention' | 'audit'>('all');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
+
+  // Compliance Events Timeline Status Filter
+  const [timelineStatusFilter, setTimelineStatusFilter] = useState<'ALL' | ComplianceEventStatus>('ALL');
 
   // Dedicated Device Status & Chain-of-Custody Table State
   const [deviceStatusFilter, setDeviceStatusFilter] = useState<'ALL' | 'FLAGGED' | 'HOLD' | 'PURGED_NIST' | 'INTAKE' | 'TRANSIT' | 'CERTIFIED'>('ALL');
@@ -736,6 +742,18 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold font-mono">
             10 State Hubs
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('imei_terminal')}
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition shrink-0 ${
+            activeTab === 'imei_terminal'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          <span>CEIR Sanchar Saathi</span>
         </button>
 
         <button
@@ -1746,8 +1764,94 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
           {/* Recharts Bar Chart Visualizing Audit Pass/Fail Trend over last 12 months */}
           <AuditPassFailTrendChart />
 
+          {/* Dedicated Executive Filter Bar for Compliance Events Timeline */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-950 via-purple-950/25 to-slate-950 border border-purple-500/30 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  <Filter className="w-4 h-4" />
+                </span>
+                <h4 className="text-sm font-bold text-white tracking-tight">
+                  Compliance Events Timeline Status Filter
+                </h4>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/60 font-bold">
+                  Rule 19 Live Audit
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Filter historical CPCB verification events by statutory outcome: Pass, Fail, Flagged, or Pending.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {(
+                [
+                  { key: 'ALL', label: 'All Events', count: 10, icon: Sparkles, color: 'purple' },
+                  { key: 'Pass', label: 'Pass', count: 4, icon: CheckCircle2, color: 'emerald' },
+                  { key: 'Fail', label: 'Fail', count: 2, icon: XCircle, color: 'rose' },
+                  { key: 'Flagged', label: 'Flagged', count: 2, icon: AlertTriangle, color: 'amber' },
+                  { key: 'Pending', label: 'Pending', count: 2, icon: Hourglass, color: 'cyan' }
+                ] as const
+              ).map((f) => {
+                const isSelected = timelineStatusFilter === f.key;
+                const IconComponent = f.icon;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setTimelineStatusFilter(f.key as any)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border shadow-sm ${
+                      isSelected
+                        ? f.color === 'emerald'
+                          ? 'bg-emerald-600 text-white border-emerald-400 shadow-emerald-600/30 ring-2 ring-emerald-500/40'
+                          : f.color === 'rose'
+                          ? 'bg-rose-600 text-white border-rose-400 shadow-rose-600/30 ring-2 ring-rose-500/40'
+                          : f.color === 'amber'
+                          ? 'bg-amber-600 text-white border-amber-400 shadow-amber-600/30 ring-2 ring-amber-500/40'
+                          : f.color === 'cyan'
+                          ? 'bg-cyan-600 text-white border-cyan-400 shadow-cyan-600/30 ring-2 ring-cyan-500/40'
+                          : 'bg-purple-600 text-white border-purple-400 shadow-purple-600/30 ring-2 ring-purple-500/40'
+                        : f.color === 'emerald'
+                        ? 'bg-slate-900/90 text-emerald-300 hover:bg-emerald-950/60 border-slate-800 hover:border-emerald-700/60'
+                        : f.color === 'rose'
+                        ? 'bg-slate-900/90 text-rose-300 hover:bg-rose-950/60 border-slate-800 hover:border-rose-700/60'
+                        : f.color === 'amber'
+                        ? 'bg-slate-900/90 text-amber-300 hover:bg-amber-950/60 border-slate-800 hover:border-amber-700/60'
+                        : f.color === 'cyan'
+                        ? 'bg-slate-900/90 text-cyan-300 hover:bg-cyan-950/60 border-slate-800 hover:border-cyan-700/60'
+                        : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border-slate-800'
+                    }`}
+                  >
+                    <IconComponent className="w-3.5 h-3.5" />
+                    <span>{f.label}</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
+                      isSelected ? 'bg-black/30 text-white' : 'bg-slate-950 text-slate-400'
+                    }`}>
+                      {f.count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {timelineStatusFilter !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setTimelineStatusFilter('ALL')}
+                  className="px-2.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs border border-slate-800 transition flex items-center gap-1"
+                  title="Reset to All Events"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Interactive Vertical Step Timeline for Past CPCB Verification Events */}
-          <AuditHistoryTimeline />
+          <AuditHistoryTimeline
+            statusFilter={timelineStatusFilter}
+            onStatusFilterChange={setTimelineStatusFilter}
+          />
 
           {/* Annual Audit History Table for State-Registered Hubs */}
           <AnnualAuditHistoryTable
