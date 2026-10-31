@@ -516,10 +516,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                       required
                     />
                   </div>
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-amber-400/90 font-mono">
-                    <Info className="w-3 h-3 text-amber-400 shrink-0" />
-                    <span>Statutory Access Password: <strong className="text-white bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">maitri</strong></span>
-                  </div>
                 </div>
 
                 {/* Error Banner */}

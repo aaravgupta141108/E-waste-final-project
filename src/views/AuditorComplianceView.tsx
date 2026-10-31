@@ -61,6 +61,7 @@ import { QuarterlySummaryModal } from '../components/QuarterlySummaryModal';
 import { BulkManifestQrModal } from '../components/BulkManifestQrModal';
 import { AuditPassFailTrendChart } from '../components/AuditPassFailTrendChart';
 import { AuditHistoryTimeline, ComplianceEventStatus } from '../components/AuditHistoryTimeline';
+import { ComplianceTrendLineChart } from '../components/ComplianceTrendLineChart';
 
 export interface DeviceLifecycleEvent {
   id: string;
@@ -1761,6 +1762,9 @@ export const AuditorComplianceView: React.FC<AuditorComplianceViewProps> = ({
       {/* Tab: Annual Audit History, 12-Month Pass/Fail Trend & Step Timeline */}
       {activeTab === 'audit_history' && (
         <div className="space-y-6">
+          {/* D3-based Compliance Trend Line Chart plotting 6-month status trends to identify systemic failure points */}
+          <ComplianceTrendLineChart />
+
           {/* Recharts Bar Chart Visualizing Audit Pass/Fail Trend over last 12 months */}
           <AuditPassFailTrendChart />
 
